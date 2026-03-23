@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Footer } from "@/components/Footer";
-import { Navbar } from "@/components/Navbar";
 import { AppProviders } from "@/app/providers";
 import { AuthModals } from "@/components/auth/AuthModals";
 import { Suspense } from "react";
@@ -33,11 +31,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AppProviders>
-          <div className="flex min-h-dvh flex-col">
-            <Navbar />
-            <main className="flex-1">{children}</main>
-            <Footer />
-          </div>
+          {children}
           <Suspense fallback={null}>
             <AuthModals />
           </Suspense>
