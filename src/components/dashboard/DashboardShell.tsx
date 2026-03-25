@@ -6,6 +6,8 @@ import { DashboardTopBar } from "@/components/dashboard/DashboardTopBar";
 
 function titleForPath(pathname: string): string {
   if (pathname.startsWith("/dashboard/events")) return "Events";
+  if (pathname.startsWith("/dashboard/inventory")) return "Inventory";
+  if (pathname.startsWith("/dashboard/users")) return "Users";
   if (pathname.startsWith("/dashboard/settings")) return "Settings";
   if (pathname.startsWith("/dashboard")) return "Overview";
   return "Dashboard";
