@@ -1,5 +1,12 @@
+"use client";
+
 import Link from "next/link";
-import { formatEventDateTime, formatLkr, type EventSummary } from "@/lib/events";
+import {
+  formatEventDateTime,
+  formatLkr,
+  type EventStatus,
+  type EventSummary,
+} from "@/lib/events";
 
 function bannerSrc(event: EventSummary) {
   if (event.bannerUrl) return event.bannerUrl;
@@ -27,11 +34,15 @@ export function EventCard({
   href,
   variant = "card",
   showStatus = true,
+  onEdit,
+  onStatusChange,
 }: {
   event: EventSummary;
   href?: string;
   variant?: "card" | "list" | "home";
   showStatus?: boolean;
+  onEdit?: () => void;
+  onStatusChange?: (next: EventStatus) => void;
 }) {
   const location = locationText(event);
   const meta = [event.category, location].filter(Boolean).join(" • ");
@@ -146,6 +157,26 @@ export function EventCard({
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
               by {event.organizerName}
             </p>
+          ) : null}
+          {onStatusChange ? (
+            <select
+              value={event.status}
+              onChange={(e) => onStatusChange(e.target.value as EventStatus)}
+              className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-xs font-medium text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50"
+            >
+              <option value="DRAFT">DRAFT</option>
+              <option value="PUBLISHED">PUBLISHED</option>
+              <option value="CANCELLED">CANCELLED</option>
+            </select>
+          ) : null}
+          {onEdit ? (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="inline-flex h-8 items-center justify-center rounded-md border border-zinc-200 bg-white px-2 text-xs font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900/40"
+            >
+              Edit
+            </button>
           ) : null}
         </div>
       </div>
