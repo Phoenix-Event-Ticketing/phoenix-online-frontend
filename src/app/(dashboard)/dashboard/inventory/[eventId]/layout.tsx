@@ -1,9 +1,9 @@
-import { mockEvents } from "@/lib/mock-events";
+import { getEventStaticParams } from "@/lib/event-static-params";
 
 export const dynamicParams = false;
 
-export function generateStaticParams() {
-  return mockEvents.map((e) => ({ eventId: e.eventId }));
+export async function generateStaticParams() {
+  return getEventStaticParams();
 }
 
 export default function DashboardInventoryEventSegmentLayout({

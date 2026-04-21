@@ -1,7 +1,11 @@
+"use client";
+
 import { EventCard } from "@/components/events/EventCard";
-import { mockEvents } from "@/lib/mock-events";
+import { useListEventsQuery } from "@/store/api";
 
 export default function Home() {
+  const { data: events = [], isLoading, isError } = useListEventsQuery();
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-10 px-4 py-16">
       <div className="rounded-xl bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
@@ -12,8 +16,7 @@ export default function Home() {
           Phoenix Events
         </h1>
         <p className="mt-3 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
-          Browse upcoming events and reserve tickets. (API wiring comes next — showing sample
-          data for now.)
+          Browse upcoming events and reserve tickets.
         </p>
       </div>
 
@@ -23,9 +26,13 @@ export default function Home() {
             Upcoming events
           </h2>
         </div>
+        {isLoading ? (
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading events...</p>
+        ) : null}
+        {isError ? <p className="text-sm text-red-600">Failed to load events.</p> : null}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {mockEvents.map((event) => (
+          {events.map((event) => (
             <EventCard
               key={event.eventId}
               event={event}

@@ -3,12 +3,24 @@
 import { useState } from "react";
 import { EventCard } from "@/components/events/EventCard";
 import { type EventStatus, type EventSummary } from "@/lib/events";
-import { mockEvents } from "@/lib/mock-events";
+import {
+  useCancelEventMutation,
+  useCreateEventMutation,
+  useListEventsQuery,
+  usePublishEventMutation,
+  useUpdateEventMutation,
+  type EventApiError,
+} from "@/store/api";
 
 export default function DashboardEventsPage() {
-  const [events, setEvents] = useState<EventSummary[]>([...mockEvents]);
+  const { data: events = [], isLoading, isError } = useListEventsQuery();
+  const [createEvent, { isLoading: creating }] = useCreateEventMutation();
+  const [updateEvent, { isLoading: updating }] = useUpdateEventMutation();
+  const [publishEvent, { isLoading: publishing }] = usePublishEventMutation();
+  const [cancelEvent, { isLoading: cancelling }] = useCancelEventMutation();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -18,6 +30,7 @@ export default function DashboardEventsPage() {
   const [category, setCategory] = useState("");
   const [imageDataUrl, setImageDataUrl] = useState("");
   const [imageName, setImageName] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [status, setStatus] = useState<EventStatus>("DRAFT");
 
   function toDateTimeLocalInput(value?: string) {
@@ -37,6 +50,7 @@ export default function DashboardEventsPage() {
     setCategory("");
     setImageDataUrl("");
     setImageName("");
+    setImageFile(null);
     setStatus("DRAFT");
   }
 
@@ -48,6 +62,7 @@ export default function DashboardEventsPage() {
     }
 
     setImageName(file.name);
+    setImageFile(file);
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === "string") {
@@ -57,31 +72,64 @@ export default function DashboardEventsPage() {
     reader.readAsDataURL(file);
   }
 
-  function handleAddEvent() {
-    if (!title.trim()) return;
+  function toErrorMessage(error: unknown, fallback: string) {
+    const candidate = error as EventApiError;
+    if (typeof candidate?.data === "object" && candidate.data) {
+      const message = (candidate.data as { message?: string }).message;
+      if (message) return message;
+    }
+    if ("status" in (candidate ?? {}) && (candidate as { status?: number }).status === 403) {
+      return "You do not have permission for this action.";
+    }
+    return fallback;
+  }
 
-    const eventPayload: EventSummary = {
-      eventId: editingEventId ?? `evt_${Date.now().toString().slice(-6)}`,
+  async function handleAddEvent() {
+    if (!title.trim()) return;
+    setApiError(null);
+    const eventPayload = {
       title: title.trim(),
       description: description.trim() || undefined,
       venue: venue.trim() || undefined,
       city: city.trim() || undefined,
       eventDateTime: eventDateTime ? new Date(eventDateTime).toISOString() : undefined,
+      organizerName: "Phoenix Org",
       category: category.trim() || undefined,
-      bannerUrl: imageDataUrl || undefined,
-      status,
+      bannerUrl: imageDataUrl?.startsWith("http") ? imageDataUrl : undefined,
+      banner: imageFile,
     };
-
-    if (editingEventId) {
-      setEvents((prev) =>
-        prev.map((e) => (e.eventId === editingEventId ? eventPayload : e)),
-      );
-    } else {
-      setEvents((prev) => [eventPayload, ...prev]);
+    try {
+      if (editingEventId) {
+        await updateEvent({
+          eventId: editingEventId,
+          ...eventPayload,
+        }).unwrap();
+      } else {
+        await createEvent({
+          title: eventPayload.title,
+          venue: eventPayload.venue ?? "",
+          city: eventPayload.city ?? "",
+          eventDateTime: eventPayload.eventDateTime ?? "",
+          organizerName: eventPayload.organizerName ?? "",
+          category: eventPayload.category ?? "",
+          description: eventPayload.description,
+          bannerUrl: eventPayload.bannerUrl,
+          banner: eventPayload.banner,
+        }).unwrap();
+      }
+      if (editingEventId && status !== "DRAFT") {
+        if (status === "PUBLISHED") {
+          await publishEvent(editingEventId).unwrap();
+        } else if (status === "CANCELLED") {
+          await cancelEvent(editingEventId).unwrap();
+        }
+      }
+      setIsAddOpen(false);
+      setEditingEventId(null);
+      resetForm();
+    } catch (error) {
+      setApiError(toErrorMessage(error, "Could not save event. Please try again."));
     }
-    setIsAddOpen(false);
-    setEditingEventId(null);
-    resetForm();
   }
 
   function openAddModal() {
@@ -113,8 +161,10 @@ export default function DashboardEventsPage() {
               Events
             </h2>
             <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-              Showing sample data for now. This will be wired to the Event Service API next.
+              Connected to Event Service.
             </p>
+            {isError ? <p className="mt-1 text-xs text-red-600">Failed to load events.</p> : null}
+            {apiError ? <p className="mt-1 text-xs text-red-600">{apiError}</p> : null}
           </div>
           <div className="flex items-center gap-3">
             <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -132,21 +182,29 @@ export default function DashboardEventsPage() {
       </div>
 
       <div className="space-y-3">
+        {isLoading ? (
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
+            Loading events...
+          </div>
+        ) : null}
         {events.map((event) => (
           <EventCard
             key={event.eventId}
             event={event}
             variant="list"
             onEdit={() => openEditModal(event)}
-            onStatusChange={(nextStatus) =>
-              setEvents((prev) =>
-                prev.map((row) =>
-                  row.eventId === event.eventId
-                    ? { ...row, status: nextStatus }
-                    : row,
-                ),
-              )
-            }
+            onStatusChange={async (nextStatus) => {
+              try {
+                setApiError(null);
+                if (nextStatus === "PUBLISHED") {
+                  await publishEvent(event.eventId).unwrap();
+                } else if (nextStatus === "CANCELLED") {
+                  await cancelEvent(event.eventId).unwrap();
+                }
+              } catch (error) {
+                setApiError(toErrorMessage(error, "Could not change event status."));
+              }
+            }}
           />
         ))}
       </div>
@@ -290,9 +348,14 @@ export default function DashboardEventsPage() {
               <button
                 type="button"
                 onClick={handleAddEvent}
+                disabled={creating || updating || publishing || cancelling}
                 className="inline-flex h-10 items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
               >
-                {editingEventId ? "Update event" : "Add event"}
+                {creating || updating || publishing || cancelling
+                  ? "Saving..."
+                  : editingEventId
+                    ? "Update event"
+                    : "Add event"}
               </button>
             </div>
           </div>
