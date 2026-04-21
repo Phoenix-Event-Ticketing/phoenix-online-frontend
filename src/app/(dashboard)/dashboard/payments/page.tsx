@@ -1,14 +1,18 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
-  mockPayments,
-  mockRefunds,
-  PAYMENT_STATUS,
-  REFUND_STATUS,
-  type PaymentRecord,
-  type RefundRecord,
-} from "@/lib/mock-payments";
+  type ApiEnvelopeError,
+  type PaymentStatus,
+  useCancelPaymentMutation,
+  useCreatePaymentMutation,
+  useCreateRefundMutation,
+  useGetRefundsByPaymentIdQuery,
+  useListPaymentsQuery,
+  useUpdatePaymentStatusMutation,
+  useUpdateRefundStatusMutation,
+} from "@/store/api";
+import { useAppSelector } from "@/store/hooks";
 
 function money(amount: number, currency: string) {
   return new Intl.NumberFormat("en-US", {
@@ -18,10 +22,51 @@ function money(amount: number, currency: string) {
 }
 
 export default function DashboardPaymentsPage() {
-  const [payments, setPayments] = useState<PaymentRecord[]>([...mockPayments]);
-  const [refunds, setRefunds] = useState<RefundRecord[]>([...mockRefunds]);
-  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
-  const [editingRefundId, setEditingRefundId] = useState<string | null>(null);
+  const user = useAppSelector((s) => s.session.user);
+  const isAdmin = !!user?.roles?.includes("ADMIN");
+  const { data: payments = [], isLoading, isError } = useListPaymentsQuery(
+    isAdmin ? { all: true } : undefined,
+  );
+  const [selectedPaymentId, setSelectedPaymentId] = useState<string>("");
+  const { data: refunds = [] } = useGetRefundsByPaymentIdQuery(selectedPaymentId, {
+    skip: !selectedPaymentId,
+  });
+  const [createPayment, { isLoading: creatingPayment }] = useCreatePaymentMutation();
+  const [updatePaymentStatus, { isLoading: updatingPaymentStatus }] =
+    useUpdatePaymentStatusMutation();
+  const [cancelPayment, { isLoading: cancellingPayment }] = useCancelPaymentMutation();
+  const [createRefund, { isLoading: creatingRefund }] = useCreateRefundMutation();
+  const [updateRefundStatus, { isLoading: updatingRefundStatus }] =
+    useUpdateRefundStatusMutation();
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [refundError, setRefundError] = useState<string | null>(null);
+  const [newPayment, setNewPayment] = useState({
+    bookingId: "",
+    amount: 0,
+    currency: "USD",
+    paymentMethod: "CARD",
+  });
+  const [newRefund, setNewRefund] = useState({
+    paymentId: "",
+    refundAmount: 0,
+    refundReason: "",
+  });
+
+  const PAYMENT_STATUS: PaymentStatus[] = [
+    "PENDING",
+    "PROCESSING",
+    "SUCCESS",
+    "FAILED",
+    "CANCELLED",
+    "REFUNDED",
+  ];
+  const REFUND_STATUS = ["REQUESTED", "APPROVED", "REJECTED", "COMPLETED"];
+
+  function parseError(error: unknown, fallback: string) {
+    const candidate = error as ApiEnvelopeError;
+    const message = candidate?.data?.error?.message;
+    return message || fallback;
+  }
 
   const totalPayments = useMemo(
     () => payments.reduce((sum, p) => sum + p.amount, 0),
@@ -59,15 +104,60 @@ export default function DashboardPaymentsPage() {
         <h2 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
           Payments
         </h2>
-        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Hardcoded sample data based on your payment model.
-        </p>
+        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Live payment service data.</p>
+        {isLoading ? <p className="mt-2 text-sm text-zinc-600">Loading payments...</p> : null}
+        {isError ? <p className="mt-2 text-sm text-red-600">Failed to load payments.</p> : null}
+        {paymentError ? <p className="mt-2 text-sm text-red-600">{paymentError}</p> : null}
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-5">
+          <input
+            placeholder="Booking ID"
+            value={newPayment.bookingId}
+            onChange={(e) => setNewPayment((p) => ({ ...p, bookingId: e.target.value }))}
+            className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          />
+          <input
+            type="number"
+            placeholder="Amount"
+            value={newPayment.amount}
+            onChange={(e) => setNewPayment((p) => ({ ...p, amount: Number(e.target.value) }))}
+            className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          />
+          <input
+            placeholder="Currency"
+            value={newPayment.currency}
+            onChange={(e) => setNewPayment((p) => ({ ...p, currency: e.target.value }))}
+            className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          />
+          <input
+            placeholder="Method"
+            value={newPayment.paymentMethod}
+            onChange={(e) => setNewPayment((p) => ({ ...p, paymentMethod: e.target.value }))}
+            className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          />
+          <button
+            type="button"
+            disabled={creatingPayment}
+            onClick={async () => {
+              try {
+                setPaymentError(null);
+                await createPayment(newPayment).unwrap();
+                setNewPayment((p) => ({ ...p, bookingId: "", amount: 0 }));
+              } catch (error) {
+                setPaymentError(parseError(error, "Failed to create payment."));
+              }
+            }}
+            className="h-10 rounded-md bg-zinc-900 px-3 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+          >
+            {creatingPayment ? "Creating..." : "Create payment"}
+          </button>
+        </div>
 
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
               <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                <th className="px-2 py-2">Payment ID</th>
+                <th className="px-2 py-2">ID</th>
                 <th className="px-2 py-2">Booking ID</th>
                 <th className="px-2 py-2">User ID</th>
                 <th className="px-2 py-2">Amount</th>
@@ -79,136 +169,73 @@ export default function DashboardPaymentsPage() {
             </thead>
             <tbody>
               {payments.map((payment) => (
-                <Fragment key={payment.paymentId}>
-                  <tr className="border-b border-zinc-100 dark:border-zinc-900">
-                    <td className="px-2 py-3 font-medium text-zinc-900 dark:text-zinc-100">
-                      {payment.paymentId}
-                    </td>
-                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
-                      {payment.bookingId}
-                    </td>
-                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
-                      {payment.userId}
-                    </td>
-                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
-                      {money(payment.amount, payment.currency)}
-                    </td>
-                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
-                      {payment.paymentMethod}
-                    </td>
-                    <td className="px-2 py-3">
-                      <select
-                        value={payment.status}
-                        onChange={(e) => {
-                          setPayments((prev) =>
-                            prev.map((item) =>
-                              item.paymentId === payment.paymentId
-                                ? {
-                                    ...item,
-                                    status: e.target.value as PaymentRecord["status"],
-                                  }
-                                : item,
-                            ),
-                          );
+                <tr key={payment.id} className="border-b border-zinc-100 dark:border-zinc-900">
+                  <td className="px-2 py-3 font-medium text-zinc-900 dark:text-zinc-100">
+                    {payment.id}
+                  </td>
+                  <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{payment.bookingId}</td>
+                  <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{payment.userId ?? "—"}</td>
+                  <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
+                    {money(payment.amount, payment.currency)}
+                  </td>
+                  <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{payment.paymentMethod}</td>
+                  <td className="px-2 py-3">
+                    <select
+                      value={payment.status}
+                      disabled={!isAdmin || updatingPaymentStatus}
+                      onChange={async (e) => {
+                        try {
+                          setPaymentError(null);
+                          await updatePaymentStatus({
+                            id: payment.id,
+                            status: e.target.value as PaymentStatus,
+                          }).unwrap();
+                        } catch (error) {
+                          setPaymentError(parseError(error, "Failed to update payment status."));
+                        }
+                      }}
+                      className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs font-medium text-zinc-800 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                    >
+                      {PAYMENT_STATUS.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
+                    {payment.transactionReference ?? "N/A"}
+                  </td>
+                  <td className="px-2 py-3 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedPaymentId(payment.id);
+                          setNewRefund((prev) => ({ ...prev, paymentId: payment.id }));
                         }}
-                        className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs font-medium text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                        className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
                       >
-                        {Object.values(PAYMENT_STATUS).map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
-                      {payment.transactionReference ?? "N/A"}
-                    </td>
-                    <td className="px-2 py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setEditingPaymentId((id) =>
-                              id === payment.paymentId ? null : payment.paymentId,
-                            )
+                        Refunds
+                      </button>
+                      <button
+                        type="button"
+                        disabled={cancellingPayment}
+                        onClick={async () => {
+                          try {
+                            setPaymentError(null);
+                            await cancelPayment(payment.id).unwrap();
+                          } catch (error) {
+                            setPaymentError(parseError(error, "Failed to cancel payment."));
                           }
-                          className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
-                        >
-                          {editingPaymentId === payment.paymentId ? "Cancel" : "Edit"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPayments((prev) =>
-                              prev.filter((item) => item.paymentId !== payment.paymentId),
-                            )
-                          }
-                          className="rounded-md border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {editingPaymentId === payment.paymentId ? (
-                    <tr className="border-b border-zinc-100 bg-zinc-50/70 dark:border-zinc-900 dark:bg-zinc-900/30">
-                      <td colSpan={8} className="px-2 py-3">
-                        <div className="grid gap-2 sm:grid-cols-3">
-                          <label className="text-xs text-zinc-600 dark:text-zinc-300">
-                            Amount
-                            <input
-                              type="number"
-                              min={0}
-                              value={payment.amount}
-                              onChange={(e) =>
-                                setPayments((prev) =>
-                                  prev.map((item) =>
-                                    item.paymentId === payment.paymentId
-                                      ? { ...item, amount: Number(e.target.value) || 0 }
-                                      : item,
-                                  ),
-                                )
-                              }
-                              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                            />
-                          </label>
-                          <label className="text-xs text-zinc-600 dark:text-zinc-300">
-                            Method
-                            <input
-                              value={payment.paymentMethod}
-                              onChange={(e) =>
-                                setPayments((prev) =>
-                                  prev.map((item) =>
-                                    item.paymentId === payment.paymentId
-                                      ? { ...item, paymentMethod: e.target.value }
-                                      : item,
-                                  ),
-                                )
-                              }
-                              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                            />
-                          </label>
-                          <label className="text-xs text-zinc-600 dark:text-zinc-300">
-                            Transaction Ref
-                            <input
-                              value={payment.transactionReference ?? ""}
-                              onChange={(e) =>
-                                setPayments((prev) =>
-                                  prev.map((item) =>
-                                    item.paymentId === payment.paymentId
-                                      ? { ...item, transactionReference: e.target.value }
-                                      : item,
-                                  ),
-                                )
-                              }
-                              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                            />
-                          </label>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : null}
-                </Fragment>
+                        }}
+                        className="rounded-md border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>
@@ -220,8 +247,49 @@ export default function DashboardPaymentsPage() {
           Refunds
         </h2>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Hardcoded sample data based on your refund model.
+          Refund history for selected payment.
         </p>
+        {refundError ? <p className="mt-2 text-sm text-red-600">{refundError}</p> : null}
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-4">
+          <input
+            placeholder="Payment ID"
+            value={newRefund.paymentId}
+            onChange={(e) => setNewRefund((r) => ({ ...r, paymentId: e.target.value }))}
+            className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          />
+          <input
+            type="number"
+            placeholder="Refund amount"
+            value={newRefund.refundAmount}
+            onChange={(e) =>
+              setNewRefund((r) => ({ ...r, refundAmount: Number(e.target.value) }))
+            }
+            className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          />
+          <input
+            placeholder="Reason"
+            value={newRefund.refundReason}
+            onChange={(e) => setNewRefund((r) => ({ ...r, refundReason: e.target.value }))}
+            className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          />
+          <button
+            type="button"
+            disabled={creatingRefund}
+            onClick={async () => {
+              try {
+                setRefundError(null);
+                await createRefund(newRefund).unwrap();
+                setSelectedPaymentId(newRefund.paymentId);
+              } catch (error) {
+                setRefundError(parseError(error, "Failed to create refund."));
+              }
+            }}
+            className="h-10 rounded-md bg-zinc-900 px-3 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+          >
+            {creatingRefund ? "Submitting..." : "Request refund"}
+          </button>
+        </div>
 
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
@@ -238,117 +306,44 @@ export default function DashboardPaymentsPage() {
             </thead>
             <tbody>
               {refunds.map((refund) => (
-                <Fragment key={refund.refundId}>
-                  <tr className="border-b border-zinc-100 dark:border-zinc-900">
-                    <td className="px-2 py-3 font-medium text-zinc-900 dark:text-zinc-100">
-                      {refund.refundId}
-                    </td>
-                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
-                      {refund.paymentId}
-                    </td>
-                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
-                      {refund.userId}
-                    </td>
-                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
-                      {money(refund.refundAmount, "USD")}
-                    </td>
-                    <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
-                      {refund.refundReason}
-                    </td>
-                    <td className="px-2 py-3">
-                      <select
-                        value={refund.refundStatus}
-                        onChange={(e) =>
-                          setRefunds((prev) =>
-                            prev.map((item) =>
-                              item.refundId === refund.refundId
-                                ? {
-                                    ...item,
-                                    refundStatus: e.target.value as RefundRecord["refundStatus"],
-                                  }
-                                : item,
-                            ),
-                          )
+                <tr key={refund.id} className="border-b border-zinc-100 dark:border-zinc-900">
+                  <td className="px-2 py-3 font-medium text-zinc-900 dark:text-zinc-100">
+                    {refund.id}
+                  </td>
+                  <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{refund.paymentId}</td>
+                  <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{refund.userId ?? "—"}</td>
+                  <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
+                    {money(refund.refundAmount, "USD")}
+                  </td>
+                  <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{refund.refundReason}</td>
+                  <td className="px-2 py-3">
+                    <select
+                      value={refund.status}
+                      disabled={!isAdmin || updatingRefundStatus}
+                      onChange={async (e) => {
+                        try {
+                          setRefundError(null);
+                          await updateRefundStatus({
+                            id: refund.id,
+                            status: e.target.value,
+                          }).unwrap();
+                        } catch (error) {
+                          setRefundError(parseError(error, "Failed to update refund status."));
                         }
-                        className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs font-medium text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-                      >
-                        {Object.values(REFUND_STATUS).map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-2 py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setEditingRefundId((id) =>
-                              id === refund.refundId ? null : refund.refundId,
-                            )
-                          }
-                          className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
-                        >
-                          {editingRefundId === refund.refundId ? "Cancel" : "Edit"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setRefunds((prev) =>
-                              prev.filter((item) => item.refundId !== refund.refundId),
-                            )
-                          }
-                          className="rounded-md border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {editingRefundId === refund.refundId ? (
-                    <tr className="border-b border-zinc-100 bg-zinc-50/70 dark:border-zinc-900 dark:bg-zinc-900/30">
-                      <td colSpan={7} className="px-2 py-3">
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <label className="text-xs text-zinc-600 dark:text-zinc-300">
-                            Refund Amount
-                            <input
-                              type="number"
-                              min={0}
-                              value={refund.refundAmount}
-                              onChange={(e) =>
-                                setRefunds((prev) =>
-                                  prev.map((item) =>
-                                    item.refundId === refund.refundId
-                                      ? { ...item, refundAmount: Number(e.target.value) || 0 }
-                                      : item,
-                                  ),
-                                )
-                              }
-                              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                            />
-                          </label>
-                          <label className="text-xs text-zinc-600 dark:text-zinc-300">
-                            Reason
-                            <input
-                              value={refund.refundReason}
-                              onChange={(e) =>
-                                setRefunds((prev) =>
-                                  prev.map((item) =>
-                                    item.refundId === refund.refundId
-                                      ? { ...item, refundReason: e.target.value }
-                                      : item,
-                                  ),
-                                )
-                              }
-                              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                            />
-                          </label>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : null}
-                </Fragment>
+                      }}
+                      className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs font-medium text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                    >
+                      {REFUND_STATUS.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-2 py-3 text-right text-xs text-zinc-500">
+                    {refund.createdAt ? new Date(refund.createdAt).toLocaleString() : "—"}
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>

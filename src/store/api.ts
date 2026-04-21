@@ -94,6 +94,68 @@ export type HoldActionResponse = {
   holdStatus: "HELD" | "CONFIRMED" | "RELEASED";
   expiresAt?: string;
 };
+export type PaymentStatus =
+  | "PENDING"
+  | "PROCESSING"
+  | "SUCCESS"
+  | "FAILED"
+  | "CANCELLED"
+  | "REFUNDED";
+export type PaymentRecord = {
+  id: string;
+  bookingId: string;
+  amount: number;
+  currency: string;
+  paymentMethod: string;
+  status: PaymentStatus;
+  userId?: string;
+  transactionReference?: string;
+  metadata?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+};
+export type RefundRecord = {
+  id: string;
+  paymentId: string;
+  refundAmount: number;
+  refundReason: string;
+  status: string;
+  userId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+type ServiceEnvelope<T> = {
+  success: boolean;
+  data: T;
+  meta?: Record<string, unknown> | null;
+};
+type ServiceErrorEnvelope = {
+  success: false;
+  error?: { message?: string; code?: string; details?: unknown };
+};
+export type ApiEnvelopeError = FetchBaseQueryError & {
+  data?: ServiceErrorEnvelope;
+};
+export type CreatePaymentRequest = {
+  bookingId: string;
+  amount: number;
+  currency: string;
+  paymentMethod: string;
+  metadata?: Record<string, unknown>;
+};
+export type UpdatePaymentStatusRequest = {
+  id: string;
+  status: PaymentStatus;
+};
+export type CreateRefundRequest = {
+  paymentId: string;
+  refundAmount: number;
+  refundReason: string;
+};
+export type UpdateRefundStatusRequest = {
+  id: string;
+  status: string;
+};
 
 /** Backend origin (no trailing slash). Override via NEXT_PUBLIC_API_BASE_URL for production builds. */
 function getPublicApiBaseUrl(): string {
@@ -149,7 +211,7 @@ const rawBaseQuery = fetchBaseQuery({
 
 export const api = createApi({
   reducerPath: "api",
-  tagTypes: ["Event", "Inventory"],
+  tagTypes: ["Event", "Inventory", "Payment", "Refund"],
   baseQuery: rawBaseQuery,
   endpoints: (builder) => ({
     signIn: builder.mutation<AuthResponse, LoginRequest>({
@@ -281,6 +343,86 @@ export const api = createApi({
     releaseInventoryHold: builder.mutation<HoldActionResponse, HoldActionRequest>({
       query: (body) => ({ url: "/inventory/release", method: "POST", body }),
     }),
+    listPayments: builder.query<PaymentRecord[], { all?: boolean } | void>({
+      query: (args) => ({
+        url: "/payments",
+        params: args?.all ? { all: true } : undefined,
+      }),
+      transformResponse: (response: ServiceEnvelope<PaymentRecord[]>) =>
+        response?.data ?? [],
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((payment) => ({ type: "Payment" as const, id: payment.id })),
+              { type: "Payment" as const, id: "LIST" },
+            ]
+          : [{ type: "Payment", id: "LIST" }],
+    }),
+    getPaymentById: builder.query<PaymentRecord, string>({
+      query: (id) => ({ url: `/payments/${encodeURIComponent(id)}` }),
+      transformResponse: (response: ServiceEnvelope<PaymentRecord>) => response.data,
+      providesTags: (_result, _err, id) => [{ type: "Payment", id }],
+    }),
+    createPayment: builder.mutation<PaymentRecord, CreatePaymentRequest>({
+      query: (body) => ({ url: "/payments", method: "POST", body }),
+      transformResponse: (response: ServiceEnvelope<PaymentRecord>) => response.data,
+      invalidatesTags: [{ type: "Payment", id: "LIST" }],
+    }),
+    updatePaymentStatus: builder.mutation<PaymentRecord, UpdatePaymentStatusRequest>({
+      query: ({ id, status }) => ({
+        url: `/payments/${encodeURIComponent(id)}/status`,
+        method: "PATCH",
+        body: { status },
+      }),
+      transformResponse: (response: ServiceEnvelope<PaymentRecord>) => response.data,
+      invalidatesTags: (_result, _err, arg) => [
+        { type: "Payment", id: arg.id },
+        { type: "Payment", id: "LIST" },
+      ],
+    }),
+    cancelPayment: builder.mutation<PaymentRecord, string>({
+      query: (id) => ({ url: `/payments/${encodeURIComponent(id)}/cancel`, method: "PATCH" }),
+      transformResponse: (response: ServiceEnvelope<PaymentRecord>) => response.data,
+      invalidatesTags: (_result, _err, id) => [
+        { type: "Payment", id },
+        { type: "Payment", id: "LIST" },
+      ],
+    }),
+    createRefund: builder.mutation<RefundRecord, CreateRefundRequest>({
+      query: (body) => ({ url: "/refunds", method: "POST", body }),
+      transformResponse: (response: ServiceEnvelope<RefundRecord>) => response.data,
+      invalidatesTags: (_result, _err, arg) => [
+        { type: "Payment", id: arg.paymentId },
+        { type: "Refund", id: "LIST" },
+      ],
+    }),
+    updateRefundStatus: builder.mutation<RefundRecord, UpdateRefundStatusRequest>({
+      query: ({ id, status }) => ({
+        url: `/refunds/${encodeURIComponent(id)}/status`,
+        method: "PATCH",
+        body: { status },
+      }),
+      transformResponse: (response: ServiceEnvelope<RefundRecord>) => response.data,
+      invalidatesTags: (_result, _err, arg) => [{ type: "Refund", id: arg.id }],
+    }),
+    getRefundById: builder.query<RefundRecord, string>({
+      query: (id) => ({ url: `/refunds/${encodeURIComponent(id)}` }),
+      transformResponse: (response: ServiceEnvelope<RefundRecord>) => response.data,
+      providesTags: (_result, _err, id) => [{ type: "Refund", id }],
+    }),
+    getRefundsByPaymentId: builder.query<RefundRecord[], string>({
+      query: (paymentId) => ({
+        url: `/refunds/payment/${encodeURIComponent(paymentId)}`,
+      }),
+      transformResponse: (response: ServiceEnvelope<RefundRecord[]>) => response.data ?? [],
+      providesTags: (result, _err, paymentId) =>
+        result
+          ? [
+              ...result.map((refund) => ({ type: "Refund" as const, id: refund.id })),
+              { type: "Refund" as const, id: `PAYMENT:${paymentId}` },
+            ]
+          : [{ type: "Refund", id: `PAYMENT:${paymentId}` }],
+    }),
   }),
 });
 
@@ -305,4 +447,13 @@ export const {
   useHoldInventoryMutation,
   useConfirmInventoryHoldMutation,
   useReleaseInventoryHoldMutation,
+  useListPaymentsQuery,
+  useGetPaymentByIdQuery,
+  useCreatePaymentMutation,
+  useUpdatePaymentStatusMutation,
+  useCancelPaymentMutation,
+  useCreateRefundMutation,
+  useUpdateRefundStatusMutation,
+  useGetRefundByIdQuery,
+  useGetRefundsByPaymentIdQuery,
 } = api;
