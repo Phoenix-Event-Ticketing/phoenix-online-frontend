@@ -15,7 +15,7 @@ export function SessionBootstrap() {
       dispatch(
         setSession({
           user: persisted.user,
-          tokenPlaceholder: persisted.tokenPlaceholder,
+          accessToken: persisted.accessToken,
         }),
       );
     } else {

@@ -10,41 +10,36 @@ export type SessionUser = {
 type SessionState = {
   status: "unknown" | "authenticated" | "unauthenticated";
   user: SessionUser | null;
-  /**
-   * UI-only stand-in for “credentials present”.
-   * In production, auth is HttpOnly cookies — this is for demo / future wiring.
-   */
-  tokenPlaceholder: string | null;
+  accessToken: string | null;
 };
 
 const initialState: SessionState = {
   status: "unknown",
   user: null,
-  tokenPlaceholder: null,
+  accessToken: null,
 };
 
 const sessionSlice = createSlice({
   name: "session",
   initialState,
   reducers: {
-    /** Full UI session (user + optional token ref for headers later). */
+    /** Full client session (user + bearer token). */
     setSession(
       state,
-      action: PayloadAction<{ user: SessionUser; tokenPlaceholder: string }>,
+      action: PayloadAction<{ user: SessionUser; accessToken: string }>,
     ) {
       state.status = "authenticated";
       state.user = action.payload.user;
-      state.tokenPlaceholder = action.payload.tokenPlaceholder;
+      state.accessToken = action.payload.accessToken;
     },
     setAuthenticated(state, action: PayloadAction<SessionUser>) {
       state.status = "authenticated";
       state.user = action.payload;
-      state.tokenPlaceholder = null;
     },
     setUnauthenticated(state) {
       state.status = "unauthenticated";
       state.user = null;
-      state.tokenPlaceholder = null;
+      state.accessToken = null;
     },
     setHydrationComplete(state) {
       if (state.status === "unknown") {

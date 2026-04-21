@@ -20,7 +20,7 @@ export function DashboardTopBar({ title }: { title: string }) {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const user = useAppSelector((s) => s.session.user);
-  const tokenPlaceholder = useAppSelector((s) => s.session.tokenPlaceholder);
+  const accessToken = useAppSelector((s) => s.session.accessToken);
   const [menuOpen, setMenuOpen] = useState(false);
 
   function handleLogout() {
@@ -40,12 +40,12 @@ export function DashboardTopBar({ title }: { title: string }) {
       </h1>
 
       <div className="relative flex items-center gap-3">
-        {tokenPlaceholder ? (
+        {accessToken ? (
           <span
             className="hidden max-w-[140px] truncate rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 font-mono text-[10px] text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 sm:inline-block"
-            title="UI placeholder for auth credential (HttpOnly in production)"
+            title="Bearer token for authenticated API calls"
           >
-            {tokenPlaceholder.slice(0, 12)}…
+            {accessToken.slice(0, 12)}…
           </span>
         ) : null}
 

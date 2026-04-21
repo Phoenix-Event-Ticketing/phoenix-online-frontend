@@ -1,6 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  useBatchUsersMutation,
+  useUpdateUserMutation,
+  useUpdateUserRoleMutation,
+  type ApiUser,
+} from "@/store/api";
 
 type RoleName = "USER" | "ORGANIZER" | "ADMIN";
 type UserStatus = "ACTIVE" | "INACTIVE";
@@ -133,6 +139,22 @@ function uid(prefix: string) {
   return `${prefix}_${Math.random().toString(16).slice(2, 10)}`;
 }
 
+function firstRole(roles?: string[]): RoleName {
+  const role = roles?.[0];
+  if (role === "ADMIN" || role === "ORGANIZER" || role === "USER") return role;
+  return "USER";
+}
+
+function toAdminRow(user: ApiUser): AdminUserRow {
+  return {
+    id: user.id,
+    name: user.name?.trim() || "Unnamed user",
+    email: user.email,
+    role: firstRole(user.roles),
+    status: "ACTIVE",
+  };
+}
+
 export function UsersAdminPanel() {
   const [view, setView] = useState<"users" | "permissions">("users");
   const [q, setQ] = useState("");
@@ -223,6 +245,33 @@ export function UsersAdminPanel() {
   const [draftEmail, setDraftEmail] = useState("");
   const [draftRole, setDraftRole] = useState<RoleName>("USER");
   const [draftStatus, setDraftStatus] = useState<UserStatus>("ACTIVE");
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [batchUsers, { isLoading: loadingUsers }] = useBatchUsersMutation();
+  const [updateUser, { isLoading: updatingUser }] = useUpdateUserMutation();
+  const [updateUserRole, { isLoading: updatingRole }] = useUpdateUserRoleMutation();
+
+  useEffect(() => {
+    let mounted = true;
+    const userIds = rows.map((r) => r.id);
+    if (!userIds.length) return;
+
+    (async () => {
+      try {
+        const users = await batchUsers({ user_ids: userIds }).unwrap();
+        if (!mounted || !users.length) return;
+        setRows(users.map(toAdminRow));
+      } catch {
+        if (!mounted) return;
+        setApiError("Could not load users from backend. Showing local data.");
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+    // Run only once on initial mount with seed ids.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function openCreate() {
     setDraftName("");
@@ -261,7 +310,14 @@ export function UsersAdminPanel() {
             <h2 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
               {view === "users" ? "Users" : "Permissions"}
             </h2>
-            
+            {view === "users" ? (
+              <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+                {loadingUsers ? "Syncing users from backend..." : "Users sourced from /users APIs."}
+              </p>
+            ) : null}
+            {apiError ? (
+              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{apiError}</p>
+            ) : null}
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -669,44 +725,49 @@ export function UsersAdminPanel() {
               ) : (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (modal.type === "create") {
-                      setRows((prev) => [
-                        {
-                          id: uid("usr"),
-                          name: draftName.trim() || "New User",
-                          email: draftEmail.trim() || "new@phoenix.com",
+                  disabled={updatingUser || updatingRole}
+                  onClick={async () => {
+                    try {
+                      setApiError(null);
+                      if (modal.type === "create") {
+                        // No create endpoint in current contract; keep local-only create row.
+                        setRows((prev) => [
+                          {
+                            id: uid("usr"),
+                            name: draftName.trim() || "New User",
+                            email: draftEmail.trim() || "new@phoenix.com",
+                            role: draftRole,
+                            status: draftStatus,
+                          },
+                          ...prev,
+                        ]);
+                      } else if (modal.type === "edit") {
+                        const updated = await updateUser({
+                          id: modal.id,
+                          name: draftName.trim(),
+                        }).unwrap();
+                        setRows((prev) =>
+                          prev.map((r) => (r.id === modal.id ? toAdminRow(updated) : r)),
+                        );
+                      } else if (modal.type === "role") {
+                        const updated = await updateUserRole({
+                          id: modal.id,
                           role: draftRole,
-                          status: draftStatus,
-                        },
-                        ...prev,
-                      ]);
-                    } else if (modal.type === "edit") {
-                      setRows((prev) =>
-                        prev.map((r) =>
-                          r.id === modal.id
-                            ? {
-                                ...r,
-                                name: draftName.trim() || r.name,
-                                email: draftEmail.trim() || r.email,
-                                role: draftRole,
-                                status: draftStatus,
-                              }
-                            : r,
-                        ),
-                      );
-                    } else if (modal.type === "role") {
-                      setRows((prev) =>
-                        prev.map((r) =>
-                          r.id === modal.id ? { ...r, role: draftRole } : r,
-                        ),
-                      );
+                        }).unwrap();
+                        setRows((prev) =>
+                          prev.map((r) => (r.id === modal.id ? toAdminRow(updated) : r)),
+                        );
+                      }
+                      closeModal();
+                    } catch (e) {
+                      const message =
+                        e instanceof Error ? e.message : "Request failed. Please try again.";
+                      setApiError(message);
                     }
-                    closeModal();
                   }}
                   className="inline-flex h-10 items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
                 >
-                  Save
+                  {updatingUser || updatingRole ? "Saving..." : "Save"}
                 </button>
               )}
             </div>

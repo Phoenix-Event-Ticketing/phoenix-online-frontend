@@ -1,84 +1,85 @@
 import {
   createApi,
   fetchBaseQuery,
-  type BaseQueryFn,
   type FetchArgs,
-  type FetchBaseQueryError,
 } from "@reduxjs/toolkit/query/react";
+import { getPersistedAccessToken } from "@/lib/auth-ui";
 
-type MeResponse = {
+export type UserRole = "USER" | "ORGANIZER" | "ADMIN";
+
+export type ApiUser = {
   id: string;
   email: string;
   name?: string;
-  roles?: string[];
+  roles?: UserRole[];
 };
 
-function getCookie(name: string) {
-  if (typeof document === "undefined") return undefined;
-  const encoded = document.cookie
-    .split("; ")
-    .find((c) => c.startsWith(`${encodeURIComponent(name)}=`));
-  if (!encoded) return undefined;
-  return decodeURIComponent(encoded.split("=").slice(1).join("="));
+export type RegisterRequest = { email: string; password: string; name?: string };
+export type LoginRequest = { email: string; password: string };
+export type BatchUsersRequest = { user_ids: string[] };
+export type UpdateUserRequest = { id: string; name: string };
+export type UpdateRoleRequest = { id: string; role: UserRole };
+
+type AuthResponse = {
+  accessToken?: string;
+  token?: string;
+  access_token?: string;
+  user?: ApiUser;
+};
+type BatchUsersResponse = { users?: ApiUser[] };
+
+/** Backend origin (no trailing slash). Override via NEXT_PUBLIC_API_BASE_URL for production builds. */
+function getPublicApiBaseUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  if (raw) return raw.replace(/\/+$/, "");
+  return "http://localhost:8080";
 }
 
 const rawBaseQuery = fetchBaseQuery({
-  baseUrl: "/api",
-  credentials: "include",
+  baseUrl: getPublicApiBaseUrl(),
   prepareHeaders: (headers) => {
-    const csrf = getCookie("csrf_token");
-    if (csrf) headers.set("X-CSRF-Token", csrf);
+    const token = getPersistedAccessToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
     return headers;
   },
 });
 
-const baseQueryWithReauth: BaseQueryFn<
-  string | FetchArgs,
-  unknown,
-  FetchBaseQueryError
-> = async (args, api, extraOptions) => {
-  let result = await rawBaseQuery(args, api, extraOptions);
-
-  if (result.error?.status === 401) {
-    const refreshResult = await rawBaseQuery(
-      { url: "/auth/refresh", method: "POST" },
-      api,
-      extraOptions,
-    );
-
-    if (!refreshResult.error) {
-      result = await rawBaseQuery(args, api, extraOptions);
-    }
-  }
-
-  return result;
-};
-
 export const api = createApi({
   reducerPath: "api",
-  baseQuery: baseQueryWithReauth,
+  baseQuery: rawBaseQuery,
   endpoints: (builder) => ({
-    me: builder.query<MeResponse, void>({
-      query: () => ({ url: "/auth/me" }),
+    signIn: builder.mutation<AuthResponse, LoginRequest>({
+      query: (body) => ({ url: "/users/login", method: "POST", body }),
     }),
-    signIn: builder.mutation<void, { email: string; password: string }>({
-      query: (body) => ({ url: "/auth/login", method: "POST", body }),
+    signUp: builder.mutation<AuthResponse, RegisterRequest>({
+      query: (body) => ({ url: "/users/register", method: "POST", body }),
     }),
-    signUp: builder.mutation<
-      void,
-      { email: string; password: string; name?: string }
-    >({
-      query: (body) => ({ url: "/auth/register", method: "POST", body }),
+    batchUsers: builder.mutation<ApiUser[], BatchUsersRequest>({
+      query: (body) => ({ url: "/users/batch", method: "POST", body }),
+      transformResponse: (response: BatchUsersResponse | ApiUser[]) =>
+        Array.isArray(response) ? response : response.users ?? [],
     }),
-    signOut: builder.mutation<void, void>({
-      query: () => ({ url: "/auth/logout", method: "POST" }),
+    updateUser: builder.mutation<ApiUser, UpdateUserRequest>({
+      query: ({ id, name }) => ({
+        url: `/users/${encodeURIComponent(id)}`,
+        method: "PUT",
+        body: { name },
+      }),
+    }),
+    updateUserRole: builder.mutation<ApiUser, UpdateRoleRequest>({
+      query: ({ id, role }) => ({
+        url: `/users/${encodeURIComponent(id)}/role`,
+        method: "PUT",
+        body: { role },
+      }),
     }),
   }),
 });
 
 export const {
-  useMeQuery,
   useSignInMutation,
   useSignUpMutation,
-  useSignOutMutation,
+  useBatchUsersMutation,
+  useUpdateUserMutation,
+  useUpdateUserRoleMutation,
 } = api;

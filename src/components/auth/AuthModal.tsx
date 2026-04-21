@@ -2,12 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  completeUiSignIn,
-  persistUiSession,
-} from "@/lib/auth-ui";
+import { persistUiSession } from "@/lib/auth-ui";
 import { useAppDispatch } from "@/store/hooks";
-import { setSession } from "@/store/sessionSlice";
+import { setSession, type SessionUser } from "@/store/sessionSlice";
+import { useSignInMutation, useSignUpMutation, type ApiUser } from "@/store/api";
 
 type Mode = "signin" | "signup";
 
@@ -24,8 +22,35 @@ export function AuthModal({ mode, onClose }: { mode: Mode; onClose: () => void }
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [signIn] = useSignInMutation();
+  const [signUp] = useSignUpMutation();
 
   const title = useMemo(() => (tab === "signin" ? "Sign in" : "Sign up"), [tab]);
+
+  function toSessionUser(user: ApiUser | undefined, fallbackEmail: string): SessionUser {
+    if (!user) {
+      return {
+        id: `user_${fallbackEmail.replace(/[^a-zA-Z0-9]/g, "_")}`,
+        email: fallbackEmail,
+        name: fallbackEmail.split("@")[0],
+        roles: ["USER"],
+      };
+    }
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      roles: user.roles ?? ["USER"],
+    };
+  }
+
+  function getAccessToken(payload: {
+    accessToken?: string;
+    access_token?: string;
+    token?: string;
+  }): string | null {
+    return payload.accessToken ?? payload.access_token ?? payload.token ?? null;
+  }
 
   return (
     <div
@@ -105,25 +130,34 @@ export function AuthModal({ mode, onClose }: { mode: Mode; onClose: () => void }
               setInfo(null);
               setSubmitting(true);
               try {
-                if (tab === "signin") {
-                  const session = completeUiSignIn({ email, password });
+                const cleanEmail = email.trim().toLowerCase();
+
+                if (tab === "signup") {
+                  await signUp({ email: cleanEmail, password, name: name.trim() || undefined }).unwrap();
+                  setPassword("");
+                  setTab("signin");
+                  setInfo("Account created. Please sign in to continue.");
+                } else {
+                  const res = await signIn({ email: cleanEmail, password }).unwrap();
+                  const accessToken = getAccessToken(res);
+                  if (!accessToken) {
+                    throw new Error("No access token returned from login endpoint.");
+                  }
+
+                  const session = {
+                    user: toSessionUser(res.user, cleanEmail),
+                    accessToken,
+                  };
                   persistUiSession(session);
-                  dispatch(
-                    setSession({
-                      user: session.user,
-                      tokenPlaceholder: session.tokenPlaceholder,
-                    }),
-                  );
+                  dispatch(setSession(session));
                   onClose();
                   router.push("/dashboard");
                   router.refresh();
-                } else {
-                  setPassword("");
-                  setTab("signin");
-                  setInfo("Sign-up complete for demo. Please sign in to continue.");
                 }
-              } catch {
-                setError("Something went wrong. Please try again.");
+              } catch (e) {
+                const message =
+                  e instanceof Error ? e.message : "Something went wrong. Please try again.";
+                setError(message);
               } finally {
                 setSubmitting(false);
               }
