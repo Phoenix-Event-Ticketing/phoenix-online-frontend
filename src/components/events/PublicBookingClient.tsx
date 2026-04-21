@@ -3,33 +3,47 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatEventDateTime, formatLkr } from "@/lib/events";
-import { useGetEventQuery } from "@/store/api";
-import { mockInventoryByEventId, type TicketRate } from "@/lib/mock-inventory";
+import {
+  type HoldActionResponse,
+  useConfirmInventoryHoldMutation,
+  useGetEventInventoryAvailabilityQuery,
+  useGetEventQuery,
+  useHoldInventoryMutation,
+  useReleaseInventoryHoldMutation,
+} from "@/store/api";
 
 export function PublicBookingClient({ eventId }: { eventId: string }) {
   const { data: event } = useGetEventQuery(eventId, { skip: !eventId });
+  const { data: inventory } = useGetEventInventoryAvailabilityQuery(eventId, {
+    skip: !eventId,
+  });
   const rates = useMemo(
-    () => (eventId ? mockInventoryByEventId[eventId] ?? [] : []),
-    [eventId],
+    () => inventory?.items ?? [],
+    [inventory],
   );
+  const [holdInventory, { isLoading: isHolding }] = useHoldInventoryMutation();
+  const [confirmInventoryHold] = useConfirmInventoryHoldMutation();
+  const [releaseInventoryHold] = useReleaseInventoryHoldMutation();
+  const [holdResponse, setHoldResponse] = useState<HoldActionResponse | null>(null);
+  const [bookingError, setBookingError] = useState<string | null>(null);
 
   const firstAvailable = useMemo(() => {
-    return rates.find((r) => r.availableTickets > 0)?.ticketType ?? rates[0]?.ticketType ?? "";
+    return rates.find((r) => r.availableQuantity > 0)?.ticketType ?? rates[0]?.ticketType ?? "";
   }, [rates]);
 
   const [ticketType, setTicketType] = useState<string>(firstAvailable);
-  const selected: TicketRate | undefined = useMemo(
+  const selected = useMemo(
     () => rates.find((r) => r.ticketType === ticketType) ?? rates[0],
     [rates, ticketType],
   );
 
-  const maxQty = Math.max(0, selected?.availableTickets ?? 0);
+  const maxQty = Math.max(0, selected?.availableQuantity ?? 0);
   const [quantity, setQuantity] = useState<number>(Math.min(1, maxQty || 1));
 
   const clampedQty = Math.min(Math.max(quantity, 1), Math.max(1, maxQty || 1));
   const total =
-    selected && typeof selected.priceLkr === "number"
-      ? selected.priceLkr * clampedQty
+    selected && typeof selected.price === "number"
+      ? selected.price * clampedQty
       : undefined;
 
   if (!event) {
@@ -81,7 +95,7 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                 <div className="space-y-2">
                   {rates.length ? (
                     rates.map((r) => {
-                      const disabled = r.availableTickets <= 0;
+                      const disabled = r.availableQuantity <= 0;
                       const checked = ticketType === r.ticketType;
                       return (
                         <label
@@ -106,18 +120,18 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                                 disabled={disabled}
                                 onChange={() => {
                                   setTicketType(r.ticketType);
-                                  const nextMax = Math.max(0, r.availableTickets);
+                                  const nextMax = Math.max(0, r.availableQuantity);
                                   setQuantity((q) => Math.min(Math.max(1, q), Math.max(1, nextMax || 1)));
                                 }}
                               />
                               <span className="truncate font-medium">{r.ticketType}</span>
                             </div>
                             <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-                              {disabled ? "Sold out" : `${r.availableTickets} available`}
+                              {disabled ? "Sold out" : `${r.availableQuantity} available`}
                             </p>
                           </div>
                           <div className="shrink-0 font-semibold">
-                            {formatLkr(r.priceLkr) ?? `${r.priceLkr} LKR`}
+                            {formatLkr(r.price) ?? `${r.price} LKR`}
                           </div>
                         </label>
                       );
@@ -222,7 +236,7 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-zinc-600 dark:text-zinc-400">Price</p>
                   <p className="font-medium text-zinc-900 dark:text-zinc-50">
-                    {selected ? formatLkr(selected.priceLkr) ?? `${selected.priceLkr} LKR` : "—"}
+                    {selected ? formatLkr(selected.price) ?? `${selected.price} LKR` : "—"}
                   </p>
                 </div>
               </div>
@@ -236,17 +250,41 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                 </p>
               </div>
 
+              {bookingError ? (
+                <p className="mt-3 text-sm text-red-600">{bookingError}</p>
+              ) : null}
+              {holdResponse ? (
+                <p className="mt-3 text-sm text-emerald-700">
+                  Hold status: {holdResponse.holdStatus}
+                  {holdResponse.expiresAt ? ` (expires ${holdResponse.expiresAt})` : ""}
+                </p>
+              ) : null}
+
               <button
                 type="button"
                 disabled={!selected || maxQty <= 0}
                 className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
-                onClick={() => {
-                  alert(
-                    `Booking demo\\n\\nEvent: ${event.title}\\nType: ${selected?.ticketType}\\nQty: ${clampedQty}\\nTotal: ${formatLkr(total ?? 0)}`,
-                  );
+                onClick={async () => {
+                  if (!selected) return;
+                  setBookingError(null);
+                  const bookingId = `book_${Date.now().toString(36)}`;
+                  try {
+                    const hold = await holdInventory({
+                      eventId,
+                      ticketType: selected.ticketType,
+                      quantity: clampedQty,
+                      bookingId,
+                    }).unwrap();
+                    setHoldResponse(hold);
+                    const confirmed = await confirmInventoryHold({ bookingId }).unwrap();
+                    setHoldResponse(confirmed);
+                  } catch {
+                    await releaseInventoryHold({ bookingId }).unwrap().catch(() => undefined);
+                    setBookingError("Could not reserve tickets. Please try again.");
+                  }
                 }}
               >
-                Continue
+                {isHolding ? "Reserving..." : "Continue"}
               </button>
 
               <Link

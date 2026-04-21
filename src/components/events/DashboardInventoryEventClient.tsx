@@ -3,24 +3,32 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatEventDateTime, formatLkr } from "@/lib/events";
-import { mockEvents } from "@/lib/mock-events";
-import { mockInventoryByEventId, type TicketRate } from "@/lib/mock-inventory";
+import {
+  type EventApiError,
+  type TicketType,
+  useCreateInventoryMutation,
+  useGetEventInventoryQuery,
+  useGetEventQuery,
+  useUpdateInventoryMutation,
+} from "@/store/api";
 
 const ticketTypeOptions = ["VIP", "STANDARD", "EARLY_BIRD"] as const;
 
 export function DashboardInventoryEventClient({ eventId }: { eventId: string }) {
-  const event = useMemo(
-    () => mockEvents.find((item) => item.eventId === eventId),
-    [eventId],
-  );
-  const [rates, setRates] = useState<TicketRate[]>(
-    eventId ? mockInventoryByEventId[eventId] ?? [] : [],
-  );
+  const { data: event } = useGetEventQuery(eventId, { skip: !eventId });
+  const { data: inventory, isLoading } = useGetEventInventoryQuery(eventId, {
+    skip: !eventId,
+  });
+  const [createInventory, { isLoading: isCreating }] = useCreateInventoryMutation();
+  const [updateInventory, { isLoading: isUpdating }] = useUpdateInventoryMutation();
   const [ticketType, setTicketType] =
     useState<(typeof ticketTypeOptions)[number]>("VIP");
   const [priceLkr, setPriceLkr] = useState(0);
   const [ticketCount, setTicketCount] = useState(0);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  const rates = useMemo(() => inventory?.items ?? [], [inventory]);
 
   if (!event) {
     return (
@@ -32,38 +40,45 @@ export function DashboardInventoryEventClient({ eventId }: { eventId: string }) 
 
   const location = [event.venue, event.city].filter(Boolean).join(", ");
 
-  function handleAddTickets() {
+  function toErrorMessage(error: unknown, fallback: string) {
+    const candidate = error as EventApiError;
+    if (typeof candidate?.data === "object" && candidate.data) {
+      const message = (candidate.data as { error?: string; message?: string }).error
+        ?? (candidate.data as { error?: string; message?: string }).message;
+      if (message) return message;
+    }
+    if ("status" in (candidate ?? {}) && (candidate as { status?: number }).status === 403) {
+      return "You do not have permission for this action.";
+    }
+    return fallback;
+  }
+
+  async function handleAddTickets() {
     if (!ticketCount || ticketCount < 1) return;
     if (!priceLkr || priceLkr < 1) return;
-
-    setRates((prev) => {
-      const idx = prev.findIndex((r) => r.ticketType === ticketType);
-      if (idx === -1) {
-        return [
-          ...prev,
-          {
-            ticketType,
-            priceLkr,
-            availableTickets: ticketCount,
-            heldTickets: 0,
-            soldTickets: 0,
-          },
-        ];
+    setApiError(null);
+    const existing = rates.find((row) => row.ticketType === ticketType);
+    try {
+      if (existing) {
+        await updateInventory({
+          inventoryId: existing.inventoryId,
+          ticketType: ticketType as TicketType,
+          price: priceLkr,
+          totalQuantity: existing.totalQuantity + ticketCount,
+        }).unwrap();
+      } else {
+        await createInventory({
+          eventId,
+          ticketType: ticketType as TicketType,
+          price: priceLkr,
+          totalQuantity: ticketCount,
+        }).unwrap();
       }
-
-      return prev.map((r, i) =>
-        i === idx
-          ? {
-              ...r,
-              priceLkr,
-              availableTickets: r.availableTickets + ticketCount,
-            }
-          : r,
-      );
-    });
-
-    setTicketCount(0);
-    setIsAddOpen(false);
+      setTicketCount(0);
+      setIsAddOpen(false);
+    } catch (error) {
+      setApiError(toErrorMessage(error, "Could not update inventory."));
+    }
   }
 
   return (
@@ -77,6 +92,7 @@ export function DashboardInventoryEventClient({ eventId }: { eventId: string }) 
             <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
               {formatEventDateTime(event.eventDateTime)} • {location || "—"}
             </p>
+            {apiError ? <p className="mt-1 text-xs text-red-600">{apiError}</p> : null}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -105,23 +121,27 @@ export function DashboardInventoryEventClient({ eventId }: { eventId: string }) 
           <p className="text-right">Sold</p>
         </div>
         <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-          {rates.length ? (
+          {isLoading ? (
+            <div className="px-4 py-5 text-sm text-zinc-600 dark:text-zinc-400">
+              Loading inventory...
+            </div>
+          ) : rates.length ? (
             rates.map((r) => (
-              <div key={r.ticketType} className="grid grid-cols-5 items-center px-4 py-3 text-sm">
+              <div key={r.inventoryId} className="grid grid-cols-5 items-center px-4 py-3 text-sm">
                 <p className="font-medium text-zinc-900 dark:text-zinc-50">
                   {r.ticketType}
                 </p>
                 <p className="text-right text-zinc-900 dark:text-zinc-50">
-                  {formatLkr(r.priceLkr) ?? `${r.priceLkr} LKR`}
+                  {formatLkr(r.price) ?? `${r.price} LKR`}
                 </p>
                 <p className="text-right text-zinc-900 dark:text-zinc-50">
-                  {r.availableTickets}
+                  {r.availableQuantity}
                 </p>
                 <p className="text-right text-zinc-900 dark:text-zinc-50">
-                  {r.heldTickets}
+                  {r.heldQuantity}
                 </p>
                 <p className="text-right text-zinc-900 dark:text-zinc-50">
-                  {r.soldTickets}
+                  {r.soldQuantity}
                 </p>
               </div>
             ))
@@ -209,9 +229,10 @@ export function DashboardInventoryEventClient({ eventId }: { eventId: string }) 
               <button
                 type="button"
                 onClick={handleAddTickets}
+                disabled={isCreating || isUpdating}
                 className="inline-flex h-10 items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
               >
-                Add
+                {isCreating || isUpdating ? "Saving..." : "Add"}
               </button>
             </div>
           </div>

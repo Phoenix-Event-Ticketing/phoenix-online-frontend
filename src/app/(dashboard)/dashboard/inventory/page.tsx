@@ -1,15 +1,35 @@
+"use client";
+
 import Link from "next/link";
 import { formatEventDateTime } from "@/lib/events";
-import { mockEvents } from "@/lib/mock-events";
-import { mockInventoryByEventId } from "@/lib/mock-inventory";
+import {
+  useGetEventInventoryAvailabilityQuery,
+  useListEventsQuery,
+} from "@/store/api";
+
+function InventoryStats({ eventId }: { eventId: string }) {
+  const { data } = useGetEventInventoryAvailabilityQuery(eventId);
+  const items = data?.items ?? [];
+  const ticketTypes = items.length;
+  const totalAvailable = items.reduce((sum, row) => sum + row.availableQuantity, 0);
+
+  return (
+    <>
+      <p className="col-span-1 text-right text-sm text-zinc-900 dark:text-zinc-50">
+        {ticketTypes}
+      </p>
+      <p className="col-span-1 text-right text-sm font-medium text-zinc-900 dark:text-zinc-50">
+        {totalAvailable}
+      </p>
+    </>
+  );
+}
 
 export default function DashboardInventoryPage() {
-  const rows = mockEvents.map((event) => {
-    const rates = mockInventoryByEventId[event.eventId] ?? [];
-    const ticketTypes = rates.length;
-    const totalAvailable = rates.reduce((sum, r) => sum + r.availableTickets, 0);
+  const { data: events = [], isLoading, isError } = useListEventsQuery();
+  const rows = events.map((event) => {
     const location = [event.venue, event.city].filter(Boolean).join(", ");
-    return { event, ticketTypes, totalAvailable, location };
+    return { event, location };
   });
 
   return (
@@ -18,6 +38,10 @@ export default function DashboardInventoryPage() {
         <h2 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
           Inventory
         </h2>
+        {isLoading ? (
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Loading events...</p>
+        ) : null}
+        {isError ? <p className="mt-1 text-sm text-red-600">Failed to load events.</p> : null}
       </div>
 
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
@@ -31,7 +55,7 @@ export default function DashboardInventoryPage() {
         </div>
 
         <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-          {rows.map(({ event, ticketTypes, totalAvailable, location }) => (
+          {rows.map(({ event, location }) => (
             <div key={event.eventId} className="grid grid-cols-12 items-center px-4 py-3">
               <div className="col-span-4 min-w-0">
                 <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
@@ -47,12 +71,7 @@ export default function DashboardInventoryPage() {
               <p className="col-span-2 truncate text-sm text-zinc-700 dark:text-zinc-300">
                 {location || "—"}
               </p>
-              <p className="col-span-1 text-right text-sm text-zinc-900 dark:text-zinc-50">
-                {ticketTypes}
-              </p>
-              <p className="col-span-1 text-right text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                {totalAvailable}
-              </p>
+              <InventoryStats eventId={event.eventId} />
               <div className="col-span-2 flex justify-end">
                 <Link
                   href={`/dashboard/inventory/${event.eventId}`}

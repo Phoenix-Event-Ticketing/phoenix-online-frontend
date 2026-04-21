@@ -48,6 +48,52 @@ export type CreateEventRequest = Required<
   Pick<EventPayload, "description" | "bannerUrl" | "banner">;
 export type UpdateEventRequest = { eventId: string } & EventPayload;
 export type EventApiError = FetchBaseQueryError & { data?: { message?: string } };
+export type TicketType = "VIP" | "STANDARD" | "EARLY_BIRD";
+export type InventoryRecord = {
+  inventoryId: string;
+  eventId: string;
+  ticketType: TicketType;
+  price: number;
+  totalQuantity: number;
+  heldQuantity: number;
+  soldQuantity: number;
+  availableQuantity: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+type InventoryEventResponse = { eventId: string; items: InventoryRecord[] };
+export type CreateInventoryRequest = {
+  eventId: string;
+  ticketType: TicketType;
+  price: number;
+  totalQuantity: number;
+};
+export type CreateInventoryBulkRequest = {
+  eventId: string;
+  items: Array<{
+    ticketType: TicketType;
+    price: number;
+    totalQuantity: number;
+  }>;
+};
+export type UpdateInventoryRequest = {
+  inventoryId: string;
+  ticketType?: TicketType;
+  price?: number;
+  totalQuantity?: number;
+};
+export type HoldInventoryRequest = {
+  eventId: string;
+  ticketType: TicketType;
+  quantity: number;
+  bookingId: string;
+};
+export type HoldActionRequest = { bookingId: string };
+export type HoldActionResponse = {
+  bookingId: string;
+  holdStatus: "HELD" | "CONFIRMED" | "RELEASED";
+  expiresAt?: string;
+};
 
 /** Backend origin (no trailing slash). Override via NEXT_PUBLIC_API_BASE_URL for production builds. */
 function getPublicApiBaseUrl(): string {
@@ -103,7 +149,7 @@ const rawBaseQuery = fetchBaseQuery({
 
 export const api = createApi({
   reducerPath: "api",
-  tagTypes: ["Event"],
+  tagTypes: ["Event", "Inventory"],
   baseQuery: rawBaseQuery,
   endpoints: (builder) => ({
     signIn: builder.mutation<AuthResponse, LoginRequest>({
@@ -186,6 +232,55 @@ export const api = createApi({
         { type: "Event", id: "LIST" },
       ],
     }),
+    getEventInventory: builder.query<InventoryEventResponse, string>({
+      query: (eventId) => ({ url: `/inventory/event/${encodeURIComponent(eventId)}` }),
+      providesTags: (_result, _err, eventId) => [
+        { type: "Inventory", id: `EVENT:${eventId}` },
+      ],
+    }),
+    getEventInventoryAvailability: builder.query<InventoryEventResponse, string>({
+      query: (eventId) => ({
+        url: `/inventory/event/${encodeURIComponent(eventId)}/availability`,
+      }),
+      providesTags: (_result, _err, eventId) => [
+        { type: "Inventory", id: `EVENT:${eventId}` },
+      ],
+    }),
+    getInventoryById: builder.query<InventoryRecord, string>({
+      query: (inventoryId) => ({ url: `/inventory/${encodeURIComponent(inventoryId)}` }),
+      providesTags: (_result, _err, inventoryId) => [
+        { type: "Inventory", id: inventoryId },
+      ],
+    }),
+    createInventory: builder.mutation<InventoryRecord, CreateInventoryRequest>({
+      query: (body) => ({ url: "/inventory", method: "POST", body }),
+      invalidatesTags: (_result, _err, arg) => [
+        { type: "Inventory", id: `EVENT:${arg.eventId}` },
+      ],
+    }),
+    createInventoryBulk: builder.mutation<InventoryEventResponse, CreateInventoryBulkRequest>({
+      query: (body) => ({ url: "/inventory/bulk", method: "POST", body }),
+      invalidatesTags: (_result, _err, arg) => [
+        { type: "Inventory", id: `EVENT:${arg.eventId}` },
+      ],
+    }),
+    updateInventory: builder.mutation<InventoryRecord, UpdateInventoryRequest>({
+      query: ({ inventoryId, ...body }) => ({
+        url: `/inventory/${encodeURIComponent(inventoryId)}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: (_result, _err, arg) => [{ type: "Inventory", id: arg.inventoryId }],
+    }),
+    holdInventory: builder.mutation<HoldActionResponse, HoldInventoryRequest>({
+      query: (body) => ({ url: "/inventory/hold", method: "POST", body }),
+    }),
+    confirmInventoryHold: builder.mutation<HoldActionResponse, HoldActionRequest>({
+      query: (body) => ({ url: "/inventory/confirm", method: "POST", body }),
+    }),
+    releaseInventoryHold: builder.mutation<HoldActionResponse, HoldActionRequest>({
+      query: (body) => ({ url: "/inventory/release", method: "POST", body }),
+    }),
   }),
 });
 
@@ -201,4 +296,13 @@ export const {
   useUpdateEventMutation,
   usePublishEventMutation,
   useCancelEventMutation,
+  useGetEventInventoryQuery,
+  useGetEventInventoryAvailabilityQuery,
+  useGetInventoryByIdQuery,
+  useCreateInventoryMutation,
+  useCreateInventoryBulkMutation,
+  useUpdateInventoryMutation,
+  useHoldInventoryMutation,
+  useConfirmInventoryHoldMutation,
+  useReleaseInventoryHoldMutation,
 } = api;

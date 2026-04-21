@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { formatEventDateTime, formatLkr } from "@/lib/events";
-import { useGetEventQuery } from "@/store/api";
-import { mockInventoryByEventId } from "@/lib/mock-inventory";
+import { useGetEventQuery, useGetEventInventoryAvailabilityQuery } from "@/store/api";
 
 export function PublicEventDetailsClient({ eventId }: { eventId: string }) {
   const { data: event, isLoading, isError } = useGetEventQuery(eventId, {
+    skip: !eventId,
+  });
+  const { data: inventory } = useGetEventInventoryAvailabilityQuery(eventId, {
     skip: !eventId,
   });
   if (isLoading) {
@@ -28,7 +30,7 @@ export function PublicEventDetailsClient({ eventId }: { eventId: string }) {
   }
 
   const location = [event.venue, event.city].filter(Boolean).join(", ");
-  const rates = mockInventoryByEventId[event.eventId] ?? [];
+  const rates = inventory?.items ?? [];
 
   return (
     <div className="min-h-[calc(100dvh-3.5rem)] bg-white dark:bg-zinc-950">
@@ -106,10 +108,10 @@ export function PublicEventDetailsClient({ eventId }: { eventId: string }) {
                           {r.ticketType}
                         </p>
                         <p className="text-right text-zinc-700 dark:text-zinc-300">
-                          {r.availableTickets}
+                          {r.availableQuantity}
                         </p>
                         <p className="text-right font-semibold text-zinc-900 dark:text-zinc-50">
-                          {formatLkr(r.priceLkr) ?? `${r.priceLkr} LKR`}
+                          {formatLkr(r.price) ?? `${r.price} LKR`}
                         </p>
                       </div>
                     ))
@@ -154,13 +156,13 @@ export function PublicEventDetailsClient({ eventId }: { eventId: string }) {
                             {r.ticketType}
                           </p>
                           <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                            {r.availableTickets > 0
-                              ? `${r.availableTickets} available`
+                            {r.availableQuantity > 0
+                              ? `${r.availableQuantity} available`
                               : "Sold out"}
                           </p>
                         </div>
                         <p className="shrink-0 font-semibold text-zinc-900 dark:text-zinc-50">
-                          {formatLkr(r.priceLkr) ?? `${r.priceLkr} LKR`}
+                          {formatLkr(r.price) ?? `${r.price} LKR`}
                         </p>
                       </div>
                     ))
