@@ -2,16 +2,12 @@
 
 import Link from "next/link";
 import {
+  eventBannerSrc,
   formatEventDateTime,
   formatLkr,
   type EventStatus,
   type EventSummary,
 } from "@/lib/events";
-
-function bannerSrc(event: EventSummary) {
-  if (event.bannerUrl) return event.bannerUrl;
-  return `https://picsum.photos/seed/${encodeURIComponent(event.eventId)}/1200/600`;
-}
 
 function locationText(event: EventSummary) {
   return [event.venue, event.city].filter(Boolean).join(", ");
@@ -52,7 +48,7 @@ export function EventCard({
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950">
         <div className="relative aspect-4/3 w-full bg-zinc-100 dark:bg-zinc-900">
           <img
-            src={bannerSrc(event)}
+            src={eventBannerSrc(event)}
             alt=""
             className="h-full w-full object-cover"
             loading="lazy"
@@ -114,7 +110,7 @@ export function EventCard({
         <div className="flex min-w-0 gap-3">
           <div className="relative hidden h-16 w-28 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 sm:block">
             <img
-              src={bannerSrc(event)}
+              src={eventBannerSrc(event)}
               alt=""
               className="h-full w-full object-cover"
               loading="lazy"
@@ -184,7 +180,7 @@ export function EventCard({
       <div className="group overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950">
         <div className="relative h-36 w-full bg-zinc-100 dark:bg-zinc-900">
           <img
-            src={bannerSrc(event)}
+            src={eventBannerSrc(event)}
             alt=""
             className="h-full w-full object-cover"
             loading="lazy"

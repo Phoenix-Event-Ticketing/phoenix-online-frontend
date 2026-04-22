@@ -14,6 +14,13 @@ export type EventSummary = {
   status: EventStatus;
 };
 
+/** Image URL for cards and detail pages when the API omits or clears `bannerUrl`. */
+export function eventBannerSrc(event: Pick<EventSummary, "eventId" | "bannerUrl">) {
+  const trimmed = event.bannerUrl?.trim();
+  if (trimmed) return trimmed;
+  return `https://picsum.photos/seed/${encodeURIComponent(event.eventId)}/1200/600`;
+}
+
 export function formatEventDateTime(iso?: string) {
   if (!iso) return "Date TBD";
   const d = new Date(iso);

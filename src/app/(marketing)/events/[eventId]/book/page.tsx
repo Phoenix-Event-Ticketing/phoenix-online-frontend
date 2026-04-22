@@ -6,12 +6,12 @@ export function generateStaticParams() {
   return [];
 }
 
-export default function PublicBookingPage({
+export default async function PublicBookingPage({
   params,
 }: {
-  params: { eventId: string };
+  params: Promise<{ eventId: string }>;
 }) {
-  const { eventId } = params;
+  const { eventId } = await params;
   return <PublicBookingClient eventId={eventId} />;
 }
 

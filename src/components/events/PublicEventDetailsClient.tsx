@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { formatEventDateTime, formatLkr } from "@/lib/events";
+import { eventBannerSrc, formatEventDateTime, formatLkr } from "@/lib/events";
 import { useGetEventQuery, useGetEventInventoryAvailabilityQuery } from "@/store/api";
 
 export function PublicEventDetailsClient({ eventId }: { eventId: string }) {
@@ -128,15 +128,13 @@ export function PublicEventDetailsClient({ eventId }: { eventId: string }) {
           <div className="md:sticky md:top-20">
             <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
               <div className="relative aspect-4/3 w-full bg-zinc-100 dark:bg-zinc-900">
-                {event.bannerUrl ? (
-                  <img
-                    src={event.bannerUrl}
-                    alt=""
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : null}
+                <img
+                  src={eventBannerSrc(event)}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                />
               </div>
 
               <div className="space-y-3 p-4">

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { formatEventDateTime, formatLkr } from "@/lib/events";
+import { eventBannerSrc, formatEventDateTime, formatLkr } from "@/lib/events";
 import {
   type HoldActionResponse,
   useCreateBookingMutation,
@@ -192,15 +192,13 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
             <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
               <div className="flex gap-3">
                 <div className="relative h-16 w-20 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900">
-                  {event.bannerUrl ? (
-                    <img
-                      src={event.bannerUrl}
-                      alt=""
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : null}
+                  <img
+                    src={eventBannerSrc(event)}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                  />
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">

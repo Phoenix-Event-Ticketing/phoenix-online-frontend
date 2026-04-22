@@ -7,12 +7,12 @@ export async function generateStaticParams() {
   return getEventStaticParams();
 }
 
-export default function DashboardInventoryEventPage({
+export default async function DashboardInventoryEventPage({
   params,
 }: {
-  params: { eventId: string };
+  params: Promise<{ eventId: string }>;
 }) {
-  const { eventId } = params;
+  const { eventId } = await params;
   return <DashboardInventoryEventClient eventId={eventId} />;
 }
 

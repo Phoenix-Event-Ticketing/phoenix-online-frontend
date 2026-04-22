@@ -4,7 +4,7 @@ import { mockEvents } from "@/lib/mock-events";
 function getPublicApiBaseUrl(): string {
   const raw = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (raw) return raw.replace(/\/+$/, "");
-  return "http://localhost:8080";
+  return "https://api-dev.phoenix-project.online";
 }
 
 export async function getEventStaticParams(): Promise<Array<{ eventId: string }>> {

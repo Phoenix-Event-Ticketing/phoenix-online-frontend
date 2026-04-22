@@ -225,7 +225,7 @@ export type ProcessPaymentCallbackRequest = {
 function getPublicApiBaseUrl(): string {
   const raw = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (raw) return raw.replace(/\/+$/, "");
-  return "http://localhost:8080";
+  return "https://api-dev.phoenix-project.online";
 }
 
 function cleanValue(value: unknown): string | undefined {
@@ -313,6 +313,18 @@ export const api = createApi({
             ]
           : [{ type: "Event", id: "LIST" }],
     }),
+    /** All statuses (DRAFT, PUBLISHED, CANCELLED); requires auth with event view permission. */
+    listAllEvents: builder.query<EventRecord[], void>({
+      query: () => ({ url: "/events/internal/events" }),
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((event) => ({ type: "Event" as const, id: event.eventId })),
+              { type: "Event" as const, id: "LIST" },
+              { type: "Event" as const, id: "LIST_ALL" },
+            ]
+          : [{ type: "Event", id: "LIST" }, { type: "Event", id: "LIST_ALL" }],
+    }),
     getEvent: builder.query<EventRecord, string>({
       query: (eventId) => ({ url: `/events/${encodeURIComponent(eventId)}` }),
       providesTags: (_result, _err, eventId) => [{ type: "Event", id: eventId }],
@@ -322,7 +334,7 @@ export const api = createApi({
         const { body } = buildEventBody(payload);
         return { url: "/events", method: "POST", body };
       },
-      invalidatesTags: [{ type: "Event", id: "LIST" }],
+      invalidatesTags: [{ type: "Event", id: "LIST" }, { type: "Event", id: "LIST_ALL" }],
     }),
     updateEvent: builder.mutation<EventRecord, UpdateEventRequest>({
       query: ({ eventId, ...payload }) => {
@@ -336,6 +348,7 @@ export const api = createApi({
       invalidatesTags: (_result, _err, arg) => [
         { type: "Event", id: arg.eventId },
         { type: "Event", id: "LIST" },
+        { type: "Event", id: "LIST_ALL" },
       ],
     }),
     publishEvent: builder.mutation<EventRecord, string>({
@@ -346,6 +359,7 @@ export const api = createApi({
       invalidatesTags: (_result, _err, eventId) => [
         { type: "Event", id: eventId },
         { type: "Event", id: "LIST" },
+        { type: "Event", id: "LIST_ALL" },
       ],
     }),
     cancelEvent: builder.mutation<EventRecord, string>({
@@ -356,6 +370,7 @@ export const api = createApi({
       invalidatesTags: (_result, _err, eventId) => [
         { type: "Event", id: eventId },
         { type: "Event", id: "LIST" },
+        { type: "Event", id: "LIST_ALL" },
       ],
     }),
     getEventInventory: builder.query<InventoryEventResponse, string>({
@@ -584,6 +599,7 @@ export const {
   useUpdateUserMutation,
   useUpdateUserRoleMutation,
   useListEventsQuery,
+  useListAllEventsQuery,
   useGetEventQuery,
   useCreateEventMutation,
   useUpdateEventMutation,

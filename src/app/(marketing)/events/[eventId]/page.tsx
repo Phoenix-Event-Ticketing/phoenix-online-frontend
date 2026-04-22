@@ -7,12 +7,12 @@ export async function generateStaticParams() {
   return getEventStaticParams();
 }
 
-export default function PublicEventDetailsPage({
+export default async function PublicEventDetailsPage({
   params,
 }: {
-  params: { eventId: string };
+  params: Promise<{ eventId: string }>;
 }) {
-  const { eventId } = params;
+  const { eventId } = await params;
   return <PublicEventDetailsClient eventId={eventId} />;
 }
 

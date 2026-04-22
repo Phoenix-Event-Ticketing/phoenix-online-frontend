@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import { useState } from "react";
 import { EventCard } from "@/components/events/EventCard";
@@ -6,14 +6,14 @@ import { type EventStatus, type EventSummary } from "@/lib/events";
 import {
   useCancelEventMutation,
   useCreateEventMutation,
-  useListEventsQuery,
+  useListAllEventsQuery,
   usePublishEventMutation,
   useUpdateEventMutation,
   type EventApiError,
 } from "@/store/api";
 
 export default function DashboardEventsPage() {
-  const { data: events = [], isLoading, isError } = useListEventsQuery();
+  const { data: events = [], isLoading, isError } = useListAllEventsQuery();
   const [createEvent, { isLoading: creating }] = useCreateEventMutation();
   const [updateEvent, { isLoading: updating }] = useUpdateEventMutation();
   const [publishEvent, { isLoading: publishing }] = usePublishEventMutation();
@@ -161,7 +161,7 @@ export default function DashboardEventsPage() {
               Events
             </h2>
             <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-              Connected to Event Service.
+              All events (draft, published, and cancelled).
             </p>
             {isError ? <p className="mt-1 text-xs text-red-600">Failed to load events.</p> : null}
             {apiError ? <p className="mt-1 text-xs text-red-600">{apiError}</p> : null}
@@ -185,6 +185,11 @@ export default function DashboardEventsPage() {
         {isLoading ? (
           <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
             Loading events...
+          </div>
+        ) : null}
+        {!isLoading && !isError && events.length === 0 ? (
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
+            No events yet. Use &quot;Add event&quot; to create one.
           </div>
         ) : null}
         {events.map((event) => (
