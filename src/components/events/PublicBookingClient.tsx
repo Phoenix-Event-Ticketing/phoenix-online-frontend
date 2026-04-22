@@ -5,14 +5,18 @@ import { useMemo, useState } from "react";
 import { formatEventDateTime, formatLkr } from "@/lib/events";
 import {
   type HoldActionResponse,
+  useCreateBookingMutation,
   useConfirmInventoryHoldMutation,
   useGetEventInventoryAvailabilityQuery,
   useGetEventQuery,
   useHoldInventoryMutation,
   useReleaseInventoryHoldMutation,
+  useStartBookingPaymentMutation,
 } from "@/store/api";
+import { useAppSelector } from "@/store/hooks";
 
 export function PublicBookingClient({ eventId }: { eventId: string }) {
+  const user = useAppSelector((s) => s.session.user);
   const { data: event } = useGetEventQuery(eventId, { skip: !eventId });
   const { data: inventory } = useGetEventInventoryAvailabilityQuery(eventId, {
     skip: !eventId,
@@ -24,6 +28,8 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
   const [holdInventory, { isLoading: isHolding }] = useHoldInventoryMutation();
   const [confirmInventoryHold] = useConfirmInventoryHoldMutation();
   const [releaseInventoryHold] = useReleaseInventoryHoldMutation();
+  const [createBooking] = useCreateBookingMutation();
+  const [startBookingPayment] = useStartBookingPaymentMutation();
   const [holdResponse, setHoldResponse] = useState<HoldActionResponse | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
 
@@ -278,6 +284,16 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                     setHoldResponse(hold);
                     const confirmed = await confirmInventoryHold({ bookingId }).unwrap();
                     setHoldResponse(confirmed);
+                    const createdBooking = await createBooking({
+                      eventId,
+                      customerEmail: user?.email ?? "guest@example.com",
+                      ticketType: selected.ticketType,
+                      quantity: clampedQty,
+                      totalAmount: total ?? selected.price,
+                      seat: "AUTO",
+                      userId: user?.id ?? "guest-user",
+                    }).unwrap();
+                    await startBookingPayment(createdBooking.bookingId).unwrap();
                   } catch {
                     await releaseInventoryHold({ bookingId }).unwrap().catch(() => undefined);
                     setBookingError("Could not reserve tickets. Please try again.");

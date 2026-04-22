@@ -3,11 +3,11 @@
 import { useMemo, useState } from "react";
 import { formatEventDateTime, formatLkr } from "@/lib/events";
 import {
-  mockBookings,
-  type BookingRecord,
-  type BookingStatus,
-  type PaymentStatus,
-} from "@/lib/mock-bookings";
+  type ApiEnvelopeError,
+  useCancelBookingMutation,
+  useListBookingsQuery,
+  useStartBookingPaymentMutation,
+} from "@/store/api";
 
 function bookingStatusStyles(status: string) {
   switch (status) {
@@ -36,10 +36,24 @@ function paymentStatusStyles(status: string) {
 }
 
 export default function DashboardBookingsPage() {
-  const [bookings, setBookings] = useState<BookingRecord[]>([...mockBookings]);
+  const { data: bookings = [], isLoading, isError } = useListBookingsQuery();
+  const [cancelBooking, { isLoading: isCancelling }] = useCancelBookingMutation();
+  const [startBookingPayment, { isLoading: isStartingPayment }] = useStartBookingPaymentMutation();
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  function parseError(error: unknown, fallback: string) {
+    const candidate = error as ApiEnvelopeError;
+    const message =
+      typeof candidate?.data === "object" &&
+      candidate?.data &&
+      "message" in candidate.data
+        ? String((candidate.data as { message?: string }).message ?? "")
+        : "";
+    return message || fallback;
+  }
 
   const total = useMemo(
-    () => bookings.reduce((sum, b) => sum + b.totalAmountLkr, 0),
+    () => bookings.reduce((sum, b) => sum + b.totalAmount, 0),
     [bookings],
   );
   const confirmed = useMemo(
@@ -64,6 +78,11 @@ export default function DashboardBookingsPage() {
             Awaiting payment: {awaiting}
           </p>
         </div>
+        {isLoading ? (
+          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">Loading bookings...</p>
+        ) : null}
+        {isError ? <p className="mt-2 text-sm text-red-600">Failed to load bookings.</p> : null}
+        {apiError ? <p className="mt-2 text-sm text-red-600">{apiError}</p> : null}
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
@@ -109,33 +128,22 @@ export default function DashboardBookingsPage() {
                 </p>
               </div>
               <p className="col-span-2 truncate text-zinc-700 dark:text-zinc-300">
-                {b.eventTitle}
+                {b.eventId}
               </p>
               <div className="col-span-2 min-w-0">
-                <p className="truncate text-zinc-900 dark:text-zinc-50">{b.customerName}</p>
+                <p className="truncate text-zinc-900 dark:text-zinc-50">{b.userId}</p>
                 <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
                   {b.customerEmail}
                 </p>
               </div>
               <p className="col-span-1 text-right text-zinc-900 dark:text-zinc-50">{b.quantity}</p>
               <p className="col-span-1 text-right text-zinc-900 dark:text-zinc-50">
-                {formatLkr(b.totalAmountLkr) ?? `${b.totalAmountLkr} LKR`}
+                {formatLkr(b.totalAmount) ?? `${b.totalAmount} LKR`}
               </p>
               <div className="col-span-2">
                 <select
                   value={b.bookingStatus}
-                  onChange={(e) =>
-                    setBookings((prev) =>
-                      prev.map((row) =>
-                        row.bookingId === b.bookingId
-                          ? {
-                              ...row,
-                              bookingStatus: e.target.value as BookingStatus,
-                            }
-                          : row,
-                      ),
-                    )
-                  }
+                  disabled
                   className={[
                     "h-8 rounded-md border px-2 text-xs font-medium",
                     bookingStatusStyles(b.bookingStatus),
@@ -158,18 +166,7 @@ export default function DashboardBookingsPage() {
               <div className="col-span-1">
                 <select
                   value={b.paymentStatus}
-                  onChange={(e) =>
-                    setBookings((prev) =>
-                      prev.map((row) =>
-                        row.bookingId === b.bookingId
-                          ? {
-                              ...row,
-                              paymentStatus: e.target.value as PaymentStatus,
-                            }
-                          : row,
-                      ),
-                    )
-                  }
+                  disabled
                   className={[
                     "h-8 rounded-md border px-2 text-xs font-medium",
                     paymentStatusStyles(b.paymentStatus),
@@ -188,14 +185,33 @@ export default function DashboardBookingsPage() {
               <div className="col-span-1 flex justify-end">
                 <button
                   type="button"
-                  onClick={() =>
-                    setBookings((prev) =>
-                      prev.filter((row) => row.bookingId !== b.bookingId),
-                    )
-                  }
+                  disabled={isCancelling || isStartingPayment}
+                  onClick={async () => {
+                    try {
+                      setApiError(null);
+                      await cancelBooking(b.bookingId).unwrap();
+                    } catch (error) {
+                      setApiError(parseError(error, "Failed to cancel booking."));
+                    }
+                  }}
                   className="rounded-md border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-950/20"
                 >
-                  Delete
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isCancelling || isStartingPayment}
+                  onClick={async () => {
+                    try {
+                      setApiError(null);
+                      await startBookingPayment(b.bookingId).unwrap();
+                    } catch (error) {
+                      setApiError(parseError(error, "Failed to start payment."));
+                    }
+                  }}
+                  className="ml-2 rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                >
+                  Start pay
                 </button>
               </div>
             </div>

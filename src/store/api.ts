@@ -156,6 +156,70 @@ export type UpdateRefundStatusRequest = {
   id: string;
   status: string;
 };
+export type BookingStatus =
+  | "PENDING"
+  | "AWAITING_PAYMENT"
+  | "CONFIRMED"
+  | "FAILED"
+  | "CANCELLED"
+  | "EXPIRED";
+export type BookingPaymentStatus = "PENDING" | "SUCCESS" | "FAILED";
+export type BookingRecord = {
+  id?: string;
+  bookingId: string;
+  eventId: string;
+  userId: string;
+  customerEmail: string;
+  seat: string;
+  ticketType: string;
+  quantity: number;
+  totalAmount: number;
+  paymentReferenceId?: string;
+  paymentTransactionId?: string;
+  bookingStatus: BookingStatus;
+  paymentStatus: BookingPaymentStatus;
+  createdAt?: string;
+  updatedAt?: string;
+};
+export type CreateBookingRequest = {
+  eventId: string;
+  customerEmail: string;
+  ticketType: string;
+  quantity: number;
+  totalAmount: number;
+  seat: string;
+  userId: string;
+};
+export type UpdateBookingRequest = {
+  bookingId: string;
+  eventId?: string;
+  customerEmail?: string;
+  seat?: string;
+  userId?: string;
+  ticketType?: string;
+  quantity?: number;
+  totalAmount?: number;
+};
+export type StartPaymentResponse = {
+  bookingId: string;
+  paymentReferenceId: string;
+  bookingStatus: BookingStatus;
+  paymentStatus: BookingPaymentStatus;
+};
+export type PaymentCallbackRequest = {
+  bookingId: string;
+  paymentReferenceId: string;
+  paymentStatus: BookingPaymentStatus;
+  transactionId?: string;
+};
+export type ExpireBookingRequest = {
+  bookingId: string;
+  internalServiceId: string;
+};
+export type ProcessPaymentCallbackRequest = {
+  internalServiceId: string;
+  payload: PaymentCallbackRequest;
+};
 
 /** Backend origin (no trailing slash). Override via NEXT_PUBLIC_API_BASE_URL for production builds. */
 function getPublicApiBaseUrl(): string {
@@ -211,7 +275,7 @@ const rawBaseQuery = fetchBaseQuery({
 
 export const api = createApi({
   reducerPath: "api",
-  tagTypes: ["Event", "Inventory", "Payment", "Refund"],
+  tagTypes: ["Event", "Inventory", "Payment", "Refund", "Booking"],
   baseQuery: rawBaseQuery,
   endpoints: (builder) => ({
     signIn: builder.mutation<AuthResponse, LoginRequest>({
@@ -423,6 +487,93 @@ export const api = createApi({
             ]
           : [{ type: "Refund", id: `PAYMENT:${paymentId}` }],
     }),
+    createBooking: builder.mutation<BookingRecord, CreateBookingRequest>({
+      query: (body) => ({ url: "/bookings", method: "POST", body }),
+      transformResponse: (response: BookingRecord) => response,
+      invalidatesTags: [{ type: "Booking", id: "LIST" }],
+    }),
+    listBookings: builder.query<BookingRecord[], void>({
+      query: () => ({ url: "/bookings" }),
+      transformResponse: (response: BookingRecord[]) => response ?? [],
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((booking) => ({
+                type: "Booking" as const,
+                id: booking.bookingId,
+              })),
+              { type: "Booking" as const, id: "LIST" },
+            ]
+          : [{ type: "Booking", id: "LIST" }],
+    }),
+    getBookingById: builder.query<BookingRecord, string>({
+      query: (bookingId) => ({ url: `/bookings/${encodeURIComponent(bookingId)}` }),
+      transformResponse: (response: BookingRecord) => response,
+      providesTags: (_result, _err, bookingId) => [{ type: "Booking", id: bookingId }],
+    }),
+    updateBooking: builder.mutation<BookingRecord, UpdateBookingRequest>({
+      query: ({ bookingId, ...body }) => ({
+        url: `/bookings/${encodeURIComponent(bookingId)}`,
+        method: "PATCH",
+        body,
+      }),
+      transformResponse: (response: BookingRecord) => response,
+      invalidatesTags: (_result, _err, arg) => [
+        { type: "Booking", id: arg.bookingId },
+        { type: "Booking", id: "LIST" },
+      ],
+    }),
+    cancelBooking: builder.mutation<BookingRecord, string>({
+      query: (bookingId) => ({
+        url: `/bookings/${encodeURIComponent(bookingId)}/cancel`,
+        method: "PATCH",
+      }),
+      transformResponse: (response: BookingRecord) => response,
+      invalidatesTags: (_result, _err, bookingId) => [
+        { type: "Booking", id: bookingId },
+        { type: "Booking", id: "LIST" },
+      ],
+    }),
+    startBookingPayment: builder.mutation<StartPaymentResponse, string>({
+      query: (bookingId) => ({
+        url: `/bookings/${encodeURIComponent(bookingId)}/start-payment`,
+        method: "POST",
+      }),
+      transformResponse: (response: StartPaymentResponse) => response,
+      invalidatesTags: (_result, _err, bookingId) => [
+        { type: "Booking", id: bookingId },
+        { type: "Booking", id: "LIST" },
+      ],
+    }),
+    getBookingsByCustomerEmail: builder.query<BookingRecord[], string>({
+      query: (email) => ({ url: `/bookings/customer/${encodeURIComponent(email)}` }),
+      transformResponse: (response: BookingRecord[]) => response ?? [],
+    }),
+    expireBooking: builder.mutation<BookingRecord, ExpireBookingRequest>({
+      query: ({ bookingId, internalServiceId }) => ({
+        url: `/bookings/${encodeURIComponent(bookingId)}/expire`,
+        method: "POST",
+        headers: { "X-Internal-Service-Id": internalServiceId },
+      }),
+      transformResponse: (response: BookingRecord) => response,
+      invalidatesTags: (_result, _err, arg) => [
+        { type: "Booking", id: arg.bookingId },
+        { type: "Booking", id: "LIST" },
+      ],
+    }),
+    processPaymentCallback: builder.mutation<BookingRecord, ProcessPaymentCallbackRequest>({
+      query: ({ internalServiceId, payload }) => ({
+        url: "/bookings/payment-callback",
+        method: "POST",
+        headers: { "X-Internal-Service-Id": internalServiceId },
+        body: payload,
+      }),
+      transformResponse: (response: BookingRecord) => response,
+      invalidatesTags: (_result, _err, arg) => [
+        { type: "Booking", id: arg.payload.bookingId },
+        { type: "Booking", id: "LIST" },
+      ],
+    }),
   }),
 });
 
@@ -456,4 +607,13 @@ export const {
   useUpdateRefundStatusMutation,
   useGetRefundByIdQuery,
   useGetRefundsByPaymentIdQuery,
+  useCreateBookingMutation,
+  useListBookingsQuery,
+  useGetBookingByIdQuery,
+  useUpdateBookingMutation,
+  useCancelBookingMutation,
+  useStartBookingPaymentMutation,
+  useGetBookingsByCustomerEmailQuery,
+  useExpireBookingMutation,
+  useProcessPaymentCallbackMutation,
 } = api;
