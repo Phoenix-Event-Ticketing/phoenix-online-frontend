@@ -79,9 +79,37 @@ jobs:
           role-session-name: GitHub_to_AWS_via_FederatedOIDC
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Configure S3 static website fallback
+        run: |
+          if [ -z "${S3_BUCKET}" ]; then
+            echo "Error: S3_BUCKET is not set"; exit 1;
+          fi
+          aws s3api put-bucket-website \
+            --bucket "${S3_BUCKET}" \
+            --website-configuration '{"IndexDocument":{"Suffix":"index.html"},"ErrorDocument":{"Key":"index.html"}}'
+
       - name: Deploy to S3
         run: |
           if [ -z "${S3_BUCKET}" ]; then
             echo "Error: S3_BUCKET is not set"; exit 1;
           fi
           aws s3 sync ./out "s3://${S3_BUCKET}" --delete
+
+      - name: Purge Cloudflare cache (optional)
+        shell: bash
+        env:
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_ZONE_ID:-}" ] || [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo "Cloudflare purge skipped (missing CLOUDFLARE_ZONE_ID/CLOUDFLARE_API_TOKEN secrets)."
+            exit 0
+          fi
+
+          curl --fail --silent --show-error -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}'
+          echo "Cloudflare cache purged."
