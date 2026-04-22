@@ -86,7 +86,7 @@ jobs:
           fi
           aws s3api put-bucket-website \
             --bucket "${S3_BUCKET}" \
-            --website-configuration '{"IndexDocument":{"Suffix":"index.html"},"ErrorDocument":{"Key":"index.html"}}'
+            --website-configuration '{"IndexDocument":{"Suffix":"index.html"},"ErrorDocument":{"Key":"404.html"}}'
 
       - name: Deploy to S3
         run: |
