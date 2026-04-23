@@ -105,7 +105,8 @@ export type PaymentStatus =
   | "CANCELLED"
   | "REFUNDED";
 export type PaymentRecord = {
-  id: string;
+  paymentId: string;
+  id?: string;
   bookingId: string;
   amount: number;
   currency: string;
@@ -118,11 +119,13 @@ export type PaymentRecord = {
   updatedAt?: string;
 };
 export type RefundRecord = {
-  id: string;
+  refundId: string;
+  id?: string;
   paymentId: string;
   refundAmount: number;
   refundReason: string;
-  status: string;
+  refundStatus: string;
+  status?: string;
   userId?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -156,7 +159,7 @@ export type CreateRefundRequest = {
   refundReason: string;
 };
 export type UpdateRefundStatusRequest = {
-  id: string;
+  refundId: string;
   status: string;
 };
 export type BookingStatus =
@@ -223,6 +226,42 @@ export type ProcessPaymentCallbackRequest = {
   internalServiceId: string;
   payload: PaymentCallbackRequest;
 };
+
+function normalizePaymentRecord(input: Partial<PaymentRecord> & Record<string, unknown>): PaymentRecord {
+  return {
+    paymentId: String(input.paymentId ?? input.id ?? ""),
+    id: input.id ? String(input.id) : undefined,
+    bookingId: String(input.bookingId ?? ""),
+    amount: Number(input.amount ?? 0),
+    currency: String(input.currency ?? "LKR"),
+    paymentMethod: String(input.paymentMethod ?? "CARD"),
+    status: (input.status as PaymentStatus) ?? "PENDING",
+    userId: typeof input.userId === "string" ? input.userId : undefined,
+    transactionReference:
+      typeof input.transactionReference === "string" ? input.transactionReference : undefined,
+    metadata:
+      typeof input.metadata === "object" && input.metadata !== null
+        ? (input.metadata as Record<string, unknown>)
+        : undefined,
+    createdAt: typeof input.createdAt === "string" ? input.createdAt : undefined,
+    updatedAt: typeof input.updatedAt === "string" ? input.updatedAt : undefined,
+  };
+}
+
+function normalizeRefundRecord(input: Partial<RefundRecord> & Record<string, unknown>): RefundRecord {
+  return {
+    refundId: String(input.refundId ?? input.id ?? ""),
+    id: input.id ? String(input.id) : undefined,
+    paymentId: String(input.paymentId ?? ""),
+    refundAmount: Number(input.refundAmount ?? 0),
+    refundReason: String(input.refundReason ?? ""),
+    refundStatus: String(input.refundStatus ?? input.status ?? "REQUESTED"),
+    status: typeof input.status === "string" ? input.status : undefined,
+    userId: typeof input.userId === "string" ? input.userId : undefined,
+    createdAt: typeof input.createdAt === "string" ? input.createdAt : undefined,
+    updatedAt: typeof input.updatedAt === "string" ? input.updatedAt : undefined,
+  };
+}
 
 /** Backend origin (no trailing slash). Override via NEXT_PUBLIC_API_BASE_URL for production builds. */
 function getPublicApiBaseUrl(): string {
@@ -514,23 +553,31 @@ export const api = createApi({
         params: args?.all ? { all: true } : undefined,
       }),
       transformResponse: (response: ServiceEnvelope<PaymentRecord[]>) =>
-        response?.data ?? [],
+        (response?.data ?? []).map((payment) =>
+          normalizePaymentRecord(payment as Partial<PaymentRecord> & Record<string, unknown>),
+        ),
       providesTags: (result) =>
         result
           ? [
-              ...result.map((payment) => ({ type: "Payment" as const, id: payment.id })),
+              ...result.map((payment) => ({ type: "Payment" as const, id: payment.paymentId })),
               { type: "Payment" as const, id: "LIST" },
             ]
           : [{ type: "Payment", id: "LIST" }],
     }),
     getPaymentById: builder.query<PaymentRecord, string>({
       query: (id) => ({ url: `/payments/${encodeURIComponent(id)}` }),
-      transformResponse: (response: ServiceEnvelope<PaymentRecord>) => response.data,
+      transformResponse: (response: ServiceEnvelope<PaymentRecord>) =>
+        normalizePaymentRecord(
+          (response.data ?? {}) as Partial<PaymentRecord> & Record<string, unknown>,
+        ),
       providesTags: (_result, _err, id) => [{ type: "Payment", id }],
     }),
     createPayment: builder.mutation<PaymentRecord, CreatePaymentRequest>({
       query: (body) => ({ url: "/payments", method: "POST", body }),
-      transformResponse: (response: ServiceEnvelope<PaymentRecord>) => response.data,
+      transformResponse: (response: ServiceEnvelope<PaymentRecord>) =>
+        normalizePaymentRecord(
+          (response.data ?? {}) as Partial<PaymentRecord> & Record<string, unknown>,
+        ),
       invalidatesTags: [{ type: "Payment", id: "LIST" }],
     }),
     updatePaymentStatus: builder.mutation<PaymentRecord, UpdatePaymentStatusRequest>({
@@ -539,7 +586,10 @@ export const api = createApi({
         method: "PATCH",
         body: { status },
       }),
-      transformResponse: (response: ServiceEnvelope<PaymentRecord>) => response.data,
+      transformResponse: (response: ServiceEnvelope<PaymentRecord>) =>
+        normalizePaymentRecord(
+          (response.data ?? {}) as Partial<PaymentRecord> & Record<string, unknown>,
+        ),
       invalidatesTags: (_result, _err, arg) => [
         { type: "Payment", id: arg.id },
         { type: "Payment", id: "LIST" },
@@ -547,7 +597,10 @@ export const api = createApi({
     }),
     cancelPayment: builder.mutation<PaymentRecord, string>({
       query: (id) => ({ url: `/payments/${encodeURIComponent(id)}/cancel`, method: "PATCH" }),
-      transformResponse: (response: ServiceEnvelope<PaymentRecord>) => response.data,
+      transformResponse: (response: ServiceEnvelope<PaymentRecord>) =>
+        normalizePaymentRecord(
+          (response.data ?? {}) as Partial<PaymentRecord> & Record<string, unknown>,
+        ),
       invalidatesTags: (_result, _err, id) => [
         { type: "Payment", id },
         { type: "Payment", id: "LIST" },
@@ -555,35 +608,47 @@ export const api = createApi({
     }),
     createRefund: builder.mutation<RefundRecord, CreateRefundRequest>({
       query: (body) => ({ url: "/refunds", method: "POST", body }),
-      transformResponse: (response: ServiceEnvelope<RefundRecord>) => response.data,
+      transformResponse: (response: ServiceEnvelope<RefundRecord>) =>
+        normalizeRefundRecord(
+          (response.data ?? {}) as Partial<RefundRecord> & Record<string, unknown>,
+        ),
       invalidatesTags: (_result, _err, arg) => [
         { type: "Payment", id: arg.paymentId },
         { type: "Refund", id: "LIST" },
       ],
     }),
     updateRefundStatus: builder.mutation<RefundRecord, UpdateRefundStatusRequest>({
-      query: ({ id, status }) => ({
-        url: `/refunds/${encodeURIComponent(id)}/status`,
+      query: ({ refundId, status }) => ({
+        url: `/refunds/${encodeURIComponent(refundId)}/status`,
         method: "PATCH",
         body: { status },
       }),
-      transformResponse: (response: ServiceEnvelope<RefundRecord>) => response.data,
-      invalidatesTags: (_result, _err, arg) => [{ type: "Refund", id: arg.id }],
+      transformResponse: (response: ServiceEnvelope<RefundRecord>) =>
+        normalizeRefundRecord(
+          (response.data ?? {}) as Partial<RefundRecord> & Record<string, unknown>,
+        ),
+      invalidatesTags: (_result, _err, arg) => [{ type: "Refund", id: arg.refundId }],
     }),
     getRefundById: builder.query<RefundRecord, string>({
       query: (id) => ({ url: `/refunds/${encodeURIComponent(id)}` }),
-      transformResponse: (response: ServiceEnvelope<RefundRecord>) => response.data,
+      transformResponse: (response: ServiceEnvelope<RefundRecord>) =>
+        normalizeRefundRecord(
+          (response.data ?? {}) as Partial<RefundRecord> & Record<string, unknown>,
+        ),
       providesTags: (_result, _err, id) => [{ type: "Refund", id }],
     }),
     getRefundsByPaymentId: builder.query<RefundRecord[], string>({
       query: (paymentId) => ({
         url: `/refunds/payment/${encodeURIComponent(paymentId)}`,
       }),
-      transformResponse: (response: ServiceEnvelope<RefundRecord[]>) => response.data ?? [],
+      transformResponse: (response: ServiceEnvelope<RefundRecord[]>) =>
+        (response.data ?? []).map((refund) =>
+          normalizeRefundRecord(refund as Partial<RefundRecord> & Record<string, unknown>),
+        ),
       providesTags: (result, _err, paymentId) =>
         result
           ? [
-              ...result.map((refund) => ({ type: "Refund" as const, id: refund.id })),
+              ...result.map((refund) => ({ type: "Refund" as const, id: refund.refundId })),
               { type: "Refund" as const, id: `PAYMENT:${paymentId}` },
             ]
           : [{ type: "Refund", id: `PAYMENT:${paymentId}` }],

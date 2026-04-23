@@ -169,9 +169,9 @@ export default function DashboardPaymentsPage() {
             </thead>
             <tbody>
               {payments.map((payment) => (
-                <tr key={payment.id} className="border-b border-zinc-100 dark:border-zinc-900">
+                <tr key={payment.paymentId} className="border-b border-zinc-100 dark:border-zinc-900">
                   <td className="px-2 py-3 font-medium text-zinc-900 dark:text-zinc-100">
-                    {payment.id}
+                    {payment.paymentId}
                   </td>
                   <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{payment.bookingId}</td>
                   <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{payment.userId ?? "—"}</td>
@@ -187,7 +187,7 @@ export default function DashboardPaymentsPage() {
                         try {
                           setPaymentError(null);
                           await updatePaymentStatus({
-                            id: payment.id,
+                            id: payment.paymentId,
                             status: e.target.value as PaymentStatus,
                           }).unwrap();
                         } catch (error) {
@@ -211,8 +211,8 @@ export default function DashboardPaymentsPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          setSelectedPaymentId(payment.id);
-                          setNewRefund((prev) => ({ ...prev, paymentId: payment.id }));
+                          setSelectedPaymentId(payment.paymentId);
+                          setNewRefund((prev) => ({ ...prev, paymentId: payment.paymentId }));
                         }}
                         className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
                       >
@@ -224,7 +224,7 @@ export default function DashboardPaymentsPage() {
                         onClick={async () => {
                           try {
                             setPaymentError(null);
-                            await cancelPayment(payment.id).unwrap();
+                            await cancelPayment(payment.paymentId).unwrap();
                           } catch (error) {
                             setPaymentError(parseError(error, "Failed to cancel payment."));
                           }
@@ -306,9 +306,9 @@ export default function DashboardPaymentsPage() {
             </thead>
             <tbody>
               {refunds.map((refund) => (
-                <tr key={refund.id} className="border-b border-zinc-100 dark:border-zinc-900">
+                <tr key={refund.refundId} className="border-b border-zinc-100 dark:border-zinc-900">
                   <td className="px-2 py-3 font-medium text-zinc-900 dark:text-zinc-100">
-                    {refund.id}
+                    {refund.refundId}
                   </td>
                   <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{refund.paymentId}</td>
                   <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{refund.userId ?? "—"}</td>
@@ -318,13 +318,13 @@ export default function DashboardPaymentsPage() {
                   <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{refund.refundReason}</td>
                   <td className="px-2 py-3">
                     <select
-                      value={refund.status}
+                      value={refund.refundStatus}
                       disabled={!isAdmin || updatingRefundStatus}
                       onChange={async (e) => {
                         try {
                           setRefundError(null);
                           await updateRefundStatus({
-                            id: refund.id,
+                            refundId: refund.refundId,
                             status: e.target.value,
                           }).unwrap();
                         } catch (error) {

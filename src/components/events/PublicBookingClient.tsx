@@ -6,13 +6,9 @@ import { useMemo, useState } from "react";
 import { getPersistedAccessToken } from "@/lib/auth-ui";
 import { formatEventDateTime, formatLkr } from "@/lib/events";
 import {
-  type HoldActionResponse,
   useCreateBookingMutation,
-  useConfirmInventoryHoldMutation,
   useGetEventInventoryAvailabilityQuery,
   useGetEventQuery,
-  useHoldInventoryMutation,
-  useReleaseInventoryHoldMutation,
   useStartBookingPaymentMutation,
 } from "@/store/api";
 import { useAppSelector } from "@/store/hooks";
@@ -30,12 +26,9 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
     () => inventory?.items ?? [],
     [inventory],
   );
-  const [holdInventory, { isLoading: isHolding }] = useHoldInventoryMutation();
-  const [confirmInventoryHold] = useConfirmInventoryHoldMutation();
-  const [releaseInventoryHold] = useReleaseInventoryHoldMutation();
+  const [isProcessing, setIsProcessing] = useState(false);
   const [createBooking] = useCreateBookingMutation();
   const [startBookingPayment] = useStartBookingPaymentMutation();
-  const [holdResponse, setHoldResponse] = useState<HoldActionResponse | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
 
   const firstAvailable = useMemo(() => {
@@ -276,13 +269,6 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                   to continue with booking.
                 </p>
               ) : null}
-              {holdResponse ? (
-                <p className="mt-3 text-sm text-emerald-700">
-                  Hold status: {holdResponse.holdStatus}
-                  {holdResponse.expiresAt ? ` (expires ${holdResponse.expiresAt})` : ""}
-                </p>
-              ) : null}
-
               <button
                 type="button"
                 disabled={!selected || maxQty <= 0 || !user || !hasToken}
@@ -294,17 +280,8 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                   }
                   if (!selected) return;
                   setBookingError(null);
-                  const bookingId = `book_${Date.now().toString(36)}`;
+                  setIsProcessing(true);
                   try {
-                    const hold = await holdInventory({
-                      eventId,
-                      ticketType: selected.ticketType,
-                      quantity: clampedQty,
-                      bookingId,
-                    }).unwrap();
-                    setHoldResponse(hold);
-                    const confirmed = await confirmInventoryHold({ bookingId }).unwrap();
-                    setHoldResponse(confirmed);
                     const createdBooking = await createBooking({
                       eventId,
                       customerEmail: user.email,
@@ -316,12 +293,13 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                     }).unwrap();
                     await startBookingPayment(createdBooking.bookingId).unwrap();
                   } catch {
-                    await releaseInventoryHold({ bookingId }).unwrap().catch(() => undefined);
                     setBookingError("Could not reserve tickets. Please try again.");
+                  } finally {
+                    setIsProcessing(false);
                   }
                 }}
               >
-                {isHolding ? "Reserving..." : "Continue"}
+                {isProcessing ? "Processing..." : "Continue"}
               </button>
 
               <Link
