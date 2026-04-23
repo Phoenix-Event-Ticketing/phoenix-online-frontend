@@ -15,7 +15,9 @@ export type ApiUser = {
   id: string;
   email: string;
   name?: string;
+  role?: UserRole;
   roles?: UserRole[];
+  status?: "ACTIVE" | "INACTIVE";
 };
 
 export type RegisterRequest = { email: string; password: string; name?: string };
@@ -23,6 +25,21 @@ export type LoginRequest = { email: string; password: string };
 export type BatchUsersRequest = { user_ids: string[] };
 export type UpdateUserRequest = { id: string; name: string };
 export type UpdateRoleRequest = { id: string; role: UserRole };
+export type ListUsersRequest = {
+  page?: number;
+  pageSize?: number;
+  q?: string;
+  role?: UserRole;
+};
+export type ListUsersResponse = {
+  items: ApiUser[];
+  meta: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
 
 type AuthResponse = {
   accessToken?: string;
@@ -31,6 +48,17 @@ type AuthResponse = {
   user?: ApiUser;
 };
 type BatchUsersResponse = { users?: ApiUser[] };
+
+function normalizeApiUser(input: ApiUser & { role?: UserRole }): ApiUser {
+  const roleFromArray = input.roles?.[0];
+  const resolvedRole = input.role ?? roleFromArray;
+  return {
+    ...input,
+    role: resolvedRole,
+    roles: resolvedRole ? [resolvedRole] : input.roles,
+    status: input.status ?? "ACTIVE",
+  };
+}
 
 type EventPayload = {
   title?: string;
@@ -415,7 +443,7 @@ const baseQueryWithAuthGuard: BaseQueryFn<string | FetchArgs, unknown, FetchBase
 
 export const api = createApi({
   reducerPath: "api",
-  tagTypes: ["Event", "Inventory", "Payment", "Refund", "Booking"],
+  tagTypes: ["Event", "Inventory", "Payment", "Refund", "Booking", "User"],
   baseQuery: baseQueryWithAuthGuard,
   endpoints: (builder) => ({
     signIn: builder.mutation<AuthResponse, LoginRequest>({
@@ -427,7 +455,28 @@ export const api = createApi({
     batchUsers: builder.mutation<ApiUser[], BatchUsersRequest>({
       query: (body) => ({ url: "/users/batch", method: "POST", body }),
       transformResponse: (response: BatchUsersResponse | ApiUser[]) =>
-        Array.isArray(response) ? response : response.users ?? [],
+        (Array.isArray(response) ? response : response.users ?? []).map((user) =>
+          normalizeApiUser(user as ApiUser & { role?: UserRole }),
+        ),
+    }),
+    listUsers: builder.query<ListUsersResponse, ListUsersRequest | void>({
+      query: (args) => ({
+        url: "/users",
+        params: args,
+      }),
+      transformResponse: (response: ListUsersResponse) => ({
+        items: (response.items ?? []).map((user) =>
+          normalizeApiUser(user as ApiUser & { role?: UserRole }),
+        ),
+        meta: response.meta,
+      }),
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.items.map((user) => ({ type: "User" as const, id: user.id })),
+              { type: "User" as const, id: "LIST" },
+            ]
+          : [{ type: "User", id: "LIST" }],
     }),
     updateUser: builder.mutation<ApiUser, UpdateUserRequest>({
       query: ({ id, name }) => ({
@@ -435,6 +484,12 @@ export const api = createApi({
         method: "PUT",
         body: { name },
       }),
+      transformResponse: (response: ApiUser) =>
+        normalizeApiUser(response as ApiUser & { role?: UserRole }),
+      invalidatesTags: (_result, _error, arg) => [
+        { type: "User", id: arg.id },
+        { type: "User", id: "LIST" },
+      ],
     }),
     updateUserRole: builder.mutation<ApiUser, UpdateRoleRequest>({
       query: ({ id, role }) => ({
@@ -442,6 +497,12 @@ export const api = createApi({
         method: "PUT",
         body: { role },
       }),
+      transformResponse: (response: ApiUser) =>
+        normalizeApiUser(response as ApiUser & { role?: UserRole }),
+      invalidatesTags: (_result, _error, arg) => [
+        { type: "User", id: arg.id },
+        { type: "User", id: "LIST" },
+      ],
     }),
     listEvents: builder.query<EventRecord[], void>({
       query: () => ({ url: "/events" }),
@@ -747,6 +808,7 @@ export const {
   useSignInMutation,
   useSignUpMutation,
   useBatchUsersMutation,
+  useListUsersQuery,
   useUpdateUserMutation,
   useUpdateUserRoleMutation,
   useListEventsQuery,

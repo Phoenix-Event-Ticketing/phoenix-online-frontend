@@ -8,6 +8,10 @@ import { setSession, type SessionUser } from "@/store/sessionSlice";
 import { useSignInMutation, useSignUpMutation, type ApiUser } from "@/store/api";
 
 type Mode = "signin" | "signup";
+type MutationErrorLike = {
+  status?: number | string;
+  data?: { message?: string; error?: { message?: string } };
+};
 
 export function AuthModal({ mode, onClose }: { mode: Mode; onClose: () => void }) {
   const router = useRouter();
@@ -50,6 +54,20 @@ export function AuthModal({ mode, onClose }: { mode: Mode; onClose: () => void }
     token?: string;
   }): string | null {
     return payload.accessToken ?? payload.access_token ?? payload.token ?? null;
+  }
+
+  function getAuthErrorMessage(err: unknown, currentMode: Mode): string {
+    const mutationError = err as MutationErrorLike;
+    const status = mutationError?.status;
+    if (currentMode === "signin" && status === 401) {
+      return "Incorrect email or password. Please try again.";
+    }
+    const apiMessage =
+      mutationError?.data?.error?.message ??
+      mutationError?.data?.message;
+    if (apiMessage) return apiMessage;
+    if (err instanceof Error && err.message) return err.message;
+    return "Something went wrong. Please try again.";
   }
 
   return (
@@ -155,9 +173,7 @@ export function AuthModal({ mode, onClose }: { mode: Mode; onClose: () => void }
                   router.refresh();
                 }
               } catch (e) {
-                const message =
-                  e instanceof Error ? e.message : "Something went wrong. Please try again.";
-                setError(message);
+                setError(getAuthErrorMessage(e, tab));
               } finally {
                 setSubmitting(false);
               }

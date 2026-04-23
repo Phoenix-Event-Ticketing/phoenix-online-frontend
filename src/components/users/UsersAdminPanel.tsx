@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  useBatchUsersMutation,
+  useListUsersQuery,
   useUpdateUserMutation,
   useUpdateUserRoleMutation,
   type ApiUser,
@@ -135,10 +135,6 @@ function badgeStyles(kind: "role" | "status", value: string) {
   return "border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-200";
 }
 
-function uid(prefix: string) {
-  return `${prefix}_${Math.random().toString(16).slice(2, 10)}`;
-}
-
 function firstRole(roles?: string[]): RoleName {
   const role = roles?.[0];
   if (role === "ADMIN" || role === "ORGANIZER" || role === "USER") return role;
@@ -146,41 +142,23 @@ function firstRole(roles?: string[]): RoleName {
 }
 
 function toAdminRow(user: ApiUser): AdminUserRow {
+  const role = user.role ?? firstRole(user.roles);
   return {
     id: user.id,
     name: user.name?.trim() || "Unnamed user",
     email: user.email,
-    role: firstRole(user.roles),
-    status: "ACTIVE",
+    role,
+    status: user.status ?? "ACTIVE",
   };
 }
 
 export function UsersAdminPanel() {
   const [view, setView] = useState<"users" | "permissions">("users");
   const [q, setQ] = useState("");
-  const [rows, setRows] = useState<AdminUserRow[]>([
-    {
-      id: "usr_001",
-      name: "Admin User",
-      email: "admin@phoenix.com",
-      role: "ADMIN",
-      status: "ACTIVE",
-    },
-    {
-      id: "usr_002",
-      name: "Event Organizer",
-      email: "organizer@phoenix.com",
-      role: "ORGANIZER",
-      status: "ACTIVE",
-    },
-    {
-      id: "usr_003",
-      name: "Regular Customer",
-      email: "user@phoenix.com",
-      role: "USER",
-      status: "ACTIVE",
-    },
-  ]);
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [roleFilter, setRoleFilter] = useState<RoleName | "">("");
 
   const [modal, setModal] = useState<
     | null
@@ -222,56 +200,48 @@ export function UsersAdminPanel() {
     };
   });
   const [activeRole, setActiveRole] = useState<RoleName>("ADMIN");
+  const {
+    data: usersResponse,
+    isLoading: loadingUsers,
+    isFetching: fetchingUsers,
+    isError: listUsersFailed,
+    refetch,
+  } = useListUsersQuery({
+    page,
+    pageSize,
+    q: debouncedQ || undefined,
+    role: roleFilter || undefined,
+  });
+
+  const rows = useMemo(
+    () => (usersResponse?.items ?? []).map(toAdminRow),
+    [usersResponse],
+  );
 
   const editing = useMemo(() => {
     if (!modal || !("id" in modal)) return null;
     return rows.find((r) => r.id === modal.id) ?? null;
   }, [modal, rows]);
-
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return rows;
-    return rows.filter((r) => {
-      return (
-        r.name.toLowerCase().includes(s) ||
-        r.email.toLowerCase().includes(s) ||
-        r.role.toLowerCase().includes(s) ||
-        r.status.toLowerCase().includes(s)
-      );
-    });
-  }, [q, rows]);
+  const filtered = rows;
 
   const [draftName, setDraftName] = useState("");
   const [draftEmail, setDraftEmail] = useState("");
   const [draftRole, setDraftRole] = useState<RoleName>("USER");
   const [draftStatus, setDraftStatus] = useState<UserStatus>("ACTIVE");
   const [apiError, setApiError] = useState<string | null>(null);
-  const [batchUsers, { isLoading: loadingUsers }] = useBatchUsersMutation();
   const [updateUser, { isLoading: updatingUser }] = useUpdateUserMutation();
   const [updateUserRole, { isLoading: updatingRole }] = useUpdateUserRoleMutation();
 
   useEffect(() => {
-    let mounted = true;
-    const userIds = rows.map((r) => r.id);
-    if (!userIds.length) return;
+    const timer = setTimeout(() => {
+      setDebouncedQ(q.trim());
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [q]);
 
-    (async () => {
-      try {
-        const users = await batchUsers({ user_ids: userIds }).unwrap();
-        if (!mounted || !users.length) return;
-        setRows(users.map(toAdminRow));
-      } catch {
-        if (!mounted) return;
-        setApiError("Could not load users from backend. Showing local data.");
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-    // Run only once on initial mount with seed ids.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const effectiveError =
+    apiError ?? (listUsersFailed ? "Could not load users from backend." : null);
 
   function openCreate() {
     setDraftName("");
@@ -312,11 +282,13 @@ export function UsersAdminPanel() {
             </h2>
             {view === "users" ? (
               <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-                {loadingUsers ? "Syncing users from backend..." : "Users sourced from /users APIs."}
+                {loadingUsers || fetchingUsers
+                  ? "Loading users from backend..."
+                  : "Users sourced from /users APIs."}
               </p>
             ) : null}
-            {apiError ? (
-              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{apiError}</p>
+            {effectiveError ? (
+              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{effectiveError}</p>
             ) : null}
           </div>
 
@@ -356,6 +328,21 @@ export function UsersAdminPanel() {
                   placeholder="Search users…"
                   className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:focus:border-zinc-600 sm:w-64"
                 />
+                <select
+                  value={roleFilter}
+                  onChange={(e) => {
+                    setRoleFilter(e.target.value as RoleName | "");
+                    setPage(1);
+                  }}
+                  className="h-10 rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:focus:border-zinc-600"
+                >
+                  <option value="">All roles</option>
+                  {ROLE_OPTIONS.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
                   onClick={openCreate}
@@ -441,9 +428,37 @@ export function UsersAdminPanel() {
               ))
             ) : (
               <div className="px-4 py-6 text-sm text-zinc-600 dark:text-zinc-400">
-                No users found.
+                {loadingUsers || fetchingUsers ? "Loading users..." : "No users found."}
               </div>
             )}
+          </div>
+          <div className="flex items-center justify-between border-t border-zinc-200 px-4 py-3 text-xs text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+            <span>
+              Page {usersResponse?.meta.page ?? page} of {usersResponse?.meta.totalPages ?? 1} ·{" "}
+              {usersResponse?.meta.total ?? rows.length} users
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={(usersResponse?.meta.page ?? page) <= 1 || loadingUsers || fetchingUsers}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-900 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900/40"
+              >
+                Prev
+              </button>
+              <button
+                type="button"
+                disabled={
+                  (usersResponse?.meta.page ?? page) >= (usersResponse?.meta.totalPages ?? 1) ||
+                  loadingUsers ||
+                  fetchingUsers
+                }
+                onClick={() => setPage((p) => p + 1)}
+                className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-900 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900/40"
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       ) : (
@@ -715,7 +730,9 @@ export function UsersAdminPanel() {
                 <button
                   type="button"
                   onClick={() => {
-                    setRows((prev) => prev.filter((r) => r.id !== modal.id));
+                    setApiError(
+                      "Delete user endpoint is not available yet. User list remains backend-sourced.",
+                    );
                     closeModal();
                   }}
                   className="inline-flex h-10 items-center justify-center rounded-lg bg-red-600 px-4 text-sm font-medium text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600"
@@ -730,33 +747,21 @@ export function UsersAdminPanel() {
                     try {
                       setApiError(null);
                       if (modal.type === "create") {
-                        // No create endpoint in current contract; keep local-only create row.
-                        setRows((prev) => [
-                          {
-                            id: uid("usr"),
-                            name: draftName.trim() || "New User",
-                            email: draftEmail.trim() || "new@phoenix.com",
-                            role: draftRole,
-                            status: draftStatus,
-                          },
-                          ...prev,
-                        ]);
+                        setApiError(
+                          "Create user endpoint is not available yet. Please create users via user-service onboarding flow.",
+                        );
                       } else if (modal.type === "edit") {
-                        const updated = await updateUser({
+                        await updateUser({
                           id: modal.id,
                           name: draftName.trim(),
                         }).unwrap();
-                        setRows((prev) =>
-                          prev.map((r) => (r.id === modal.id ? toAdminRow(updated) : r)),
-                        );
+                        await refetch();
                       } else if (modal.type === "role") {
-                        const updated = await updateUserRole({
+                        await updateUserRole({
                           id: modal.id,
                           role: draftRole,
                         }).unwrap();
-                        setRows((prev) =>
-                          prev.map((r) => (r.id === modal.id ? toAdminRow(updated) : r)),
-                        );
+                        await refetch();
                       }
                       closeModal();
                     } catch (e) {
