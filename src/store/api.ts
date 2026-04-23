@@ -459,10 +459,10 @@ export const api = createApi({
           normalizeApiUser(user as ApiUser & { role?: UserRole }),
         ),
     }),
-    listUsers: builder.query<ListUsersResponse, ListUsersRequest | void>({
+    listUsers: builder.query<ListUsersResponse, ListUsersRequest | undefined>({
       query: (args) => ({
         url: "/users",
-        params: args,
+        params: args ?? undefined,
       }),
       transformResponse: (response: ListUsersResponse) => ({
         items: (response.items ?? []).map((user) =>
