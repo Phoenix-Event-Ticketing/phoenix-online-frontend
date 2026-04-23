@@ -84,7 +84,7 @@ export default function DashboardInventoryPage() {
               <InventoryStats eventId={event.eventId} />
               <div className="col-span-2 flex justify-end">
                 <Link
-                  href={`/dashboard/inventory/event?eventId=${encodeURIComponent(event.eventId)}`}
+                  href={`/dashboard/inventory/${encodeURIComponent(event.eventId)}`}
                   className="inline-flex h-8 items-center justify-center rounded-md border border-zinc-200 bg-white px-2 text-xs font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900/40"
                 >
                   View inventory

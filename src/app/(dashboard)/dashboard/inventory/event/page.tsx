@@ -1,12 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { DashboardInventoryEventClient } from "@/components/events/DashboardInventoryEventClient";
+import { useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function DashboardInventoryEventPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const eventId = searchParams.get("eventId")?.trim() ?? "";
+
+  useEffect(() => {
+    if (eventId) {
+      router.replace(`/dashboard/inventory/${encodeURIComponent(eventId)}`);
+    }
+  }, [eventId, router]);
 
   if (!eventId) {
     return (
@@ -22,5 +29,11 @@ export default function DashboardInventoryEventPage() {
     );
   }
 
-  return <DashboardInventoryEventClient eventId={eventId} />;
+  if (eventId) {
+    return (
+      <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">Redirecting to event inventory...</p>
+      </div>
+    );
+  }
 }

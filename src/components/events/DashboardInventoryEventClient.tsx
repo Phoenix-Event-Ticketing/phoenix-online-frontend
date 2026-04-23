@@ -15,8 +15,8 @@ import {
 const ticketTypeOptions = ["VIP", "STANDARD", "EARLY_BIRD"] as const;
 
 export function DashboardInventoryEventClient({ eventId }: { eventId: string }) {
-  const { data: event } = useGetEventQuery(eventId, { skip: !eventId });
-  const { data: inventory, isLoading } = useGetEventInventoryQuery(eventId, {
+  const { data: event, isLoading: isLoadingEvent } = useGetEventQuery(eventId, { skip: !eventId });
+  const { data: inventory, isLoading, refetch } = useGetEventInventoryQuery(eventId, {
     skip: !eventId,
   });
   const [createInventory, { isLoading: isCreating }] = useCreateInventoryMutation();
@@ -29,6 +29,14 @@ export function DashboardInventoryEventClient({ eventId }: { eventId: string }) 
   const [apiError, setApiError] = useState<string | null>(null);
 
   const rates = useMemo(() => inventory?.items ?? [], [inventory]);
+
+  if (isLoadingEvent) {
+    return (
+      <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading event...</p>
+      </div>
+    );
+  }
 
   if (!event) {
     return (
@@ -74,7 +82,9 @@ export function DashboardInventoryEventClient({ eventId }: { eventId: string }) 
           totalQuantity: ticketCount,
         }).unwrap();
       }
+      await refetch();
       setTicketCount(0);
+      setPriceLkr(0);
       setIsAddOpen(false);
     } catch (error) {
       setApiError(toErrorMessage(error, "Could not update inventory."));
@@ -166,7 +176,7 @@ export function DashboardInventoryEventClient({ eventId }: { eventId: string }) 
               Add tickets
             </h3>
             <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-              Add tickets by type with price and count (mock action, no API yet).
+              Add tickets by type with price and count using inventory-service APIs.
             </p>
 
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
