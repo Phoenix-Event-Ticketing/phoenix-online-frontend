@@ -1,9 +1,10 @@
 import { PublicBookingClient } from "@/components/events/PublicBookingClient";
+import { getEventStaticParams } from "@/lib/event-static-params";
 
 export const dynamicParams = false;
 
-export function generateStaticParams() {
-  return [];
+export async function generateStaticParams() {
+  return getEventStaticParams();
 }
 
 export default function PublicBookingPage({
