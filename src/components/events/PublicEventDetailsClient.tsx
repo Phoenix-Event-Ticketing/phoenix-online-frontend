@@ -31,6 +31,7 @@ export function PublicEventDetailsClient({ eventId }: { eventId: string }) {
 
   const location = [event.venue, event.city].filter(Boolean).join(", ");
   const rates = inventory?.items ?? [];
+  const hasAvailableTickets = rates.some((rate) => rate.availableQuantity > 0);
 
   return (
     <div className="min-h-[calc(100dvh-3.5rem)] bg-white dark:bg-zinc-950">
@@ -54,6 +55,12 @@ export function PublicEventDetailsClient({ eventId }: { eventId: string }) {
               <span>{formatEventDateTime(event.eventDateTime)}</span>
               <span className="text-white/40">•</span>
               <span>{location || "—"}</span>
+                {event.category ? (
+                  <>
+                    <span className="text-white/40">•</span>
+                    <span>{event.category}</span>
+                  </>
+                ) : null}
               {event.organizerName ? (
                 <>
                   <span className="text-white/40">•</span>
@@ -131,7 +138,7 @@ export function PublicEventDetailsClient({ eventId }: { eventId: string }) {
                 {event.bannerUrl ? (
                   <img
                     src={event.bannerUrl}
-                    alt=""
+                    alt={event.title}
                     className="h-full w-full object-cover"
                     loading="lazy"
                     referrerPolicy="no-referrer"
@@ -173,12 +180,22 @@ export function PublicEventDetailsClient({ eventId }: { eventId: string }) {
                   )}
                 </div>
 
-                <Link
-                  href={`/events/${event.eventId}/book`}
-                  className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
-                >
-                  Book now
-                </Link>
+                {hasAvailableTickets ? (
+                  <Link
+                    href={`/events/${event.eventId}/book`}
+                    className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+                  >
+                    Book now
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex h-11 w-full cursor-not-allowed items-center justify-center rounded-lg bg-zinc-300 text-sm font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                  >
+                    Sold out
+                  </button>
+                )}
               </div>
             </div>
           </div>
