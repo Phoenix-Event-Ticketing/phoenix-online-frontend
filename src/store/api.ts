@@ -366,7 +366,9 @@ const baseQueryWithAuthGuard: BaseQueryFn<string | FetchArgs, unknown, FetchBase
 
   const result = await rawBaseQuery(arg, api, extraOptions);
   const status = "error" in result ? result.error?.status : undefined;
-  if (requiresAuth && (status === 401 || status === 403)) {
+  // 401 means unauthenticated/session invalid; 403 means authenticated but unauthorized.
+  // Redirecting on 403 traps users in a sign-in loop when they lack a permission.
+  if (requiresAuth && status === 401) {
     redirectToSignIn();
   }
   return result;
