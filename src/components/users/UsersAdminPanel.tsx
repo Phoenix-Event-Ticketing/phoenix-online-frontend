@@ -217,6 +217,9 @@ export function UsersAdminPanel() {
     () => (usersResponse?.items ?? []).map(toAdminRow),
     [usersResponse],
   );
+  const metaPage = usersResponse?.meta?.page ?? page;
+  const metaTotalPages = usersResponse?.meta?.totalPages ?? 1;
+  const metaTotal = usersResponse?.meta?.total ?? rows.length;
 
   const editing = useMemo(() => {
     if (!modal || !("id" in modal)) return null;
@@ -434,13 +437,12 @@ export function UsersAdminPanel() {
           </div>
           <div className="flex items-center justify-between border-t border-zinc-200 px-4 py-3 text-xs text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
             <span>
-              Page {usersResponse?.meta.page ?? page} of {usersResponse?.meta.totalPages ?? 1} ·{" "}
-              {usersResponse?.meta.total ?? rows.length} users
+              Page {metaPage} of {metaTotalPages} · {metaTotal} users
             </span>
             <div className="flex gap-2">
               <button
                 type="button"
-                disabled={(usersResponse?.meta.page ?? page) <= 1 || loadingUsers || fetchingUsers}
+                disabled={metaPage <= 1 || loadingUsers || fetchingUsers}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-900 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900/40"
               >
@@ -448,11 +450,7 @@ export function UsersAdminPanel() {
               </button>
               <button
                 type="button"
-                disabled={
-                  (usersResponse?.meta.page ?? page) >= (usersResponse?.meta.totalPages ?? 1) ||
-                  loadingUsers ||
-                  fetchingUsers
-                }
+                disabled={metaPage >= metaTotalPages || loadingUsers || fetchingUsers}
                 onClick={() => setPage((p) => p + 1)}
                 className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-900 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900/40"
               >
