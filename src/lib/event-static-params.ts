@@ -8,7 +8,10 @@ function getPublicApiBaseUrl(): string {
 }
 
 export async function getEventStaticParams(): Promise<Array<{ eventId: string }>> {
-  const fallback = mockEvents.map((event) => ({ eventId: event.eventId }));
+  const fallback = mockEvents
+    .map((event) => event.eventId?.trim())
+    .filter((eventId): eventId is string => typeof eventId === "string" && eventId.length > 0)
+    .map((eventId) => ({ eventId }));
   try {
     const response = await fetch(`${getPublicApiBaseUrl()}/events`, {
       cache: "no-store",
@@ -16,7 +19,7 @@ export async function getEventStaticParams(): Promise<Array<{ eventId: string }>
     if (!response.ok) return fallback;
     const rows = (await response.json()) as EventIdRow[];
     const mapped = rows
-      .map((item) => item?.eventId)
+      .map((item) => item?.eventId?.trim())
       .filter((eventId): eventId is string => typeof eventId === "string" && eventId.length > 0)
       .map((eventId) => ({ eventId }));
     return mapped.length ? mapped : fallback;

@@ -12,7 +12,15 @@ export default function DashboardInventoryEventPage({
 }: {
   params: { eventId: string };
 }) {
-  const { eventId } = params;
-  return <DashboardInventoryEventClient eventId={eventId} />;
+  const rawEventId = typeof params?.eventId === "string" ? params.eventId : "";
+  const safeEventId = (() => {
+    try {
+      return decodeURIComponent(rawEventId).trim();
+    } catch {
+      return rawEventId.trim();
+    }
+  })();
+
+  return <DashboardInventoryEventClient eventId={safeEventId} />;
 }
 

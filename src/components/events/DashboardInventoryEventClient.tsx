@@ -15,9 +15,18 @@ import {
 const ticketTypeOptions = ["VIP", "STANDARD", "EARLY_BIRD"] as const;
 
 export function DashboardInventoryEventClient({ eventId }: { eventId: string }) {
-  const { data: event, isLoading: isLoadingEvent } = useGetEventQuery(eventId, { skip: !eventId });
-  const { data: inventory, isLoading, refetch } = useGetEventInventoryQuery(eventId, {
-    skip: !eventId,
+  const normalizedEventId = eventId.trim();
+  const hasEventId = normalizedEventId.length > 0;
+  const {
+    data: event,
+    isLoading: isLoadingEvent,
+    isUninitialized: isEventUninitialized,
+    isError: hasEventError,
+    error: eventError,
+    refetch: refetchEvent,
+  } = useGetEventQuery(normalizedEventId, { skip: !hasEventId });
+  const { data: inventory, isLoading, refetch } = useGetEventInventoryQuery(normalizedEventId, {
+    skip: !hasEventId,
   });
   const [createInventory, { isLoading: isCreating }] = useCreateInventoryMutation();
   const [updateInventory, { isLoading: isUpdating }] = useUpdateInventoryMutation();
@@ -30,10 +39,36 @@ export function DashboardInventoryEventClient({ eventId }: { eventId: string }) 
 
   const rates = useMemo(() => inventory?.items ?? [], [inventory]);
 
-  if (isLoadingEvent) {
+  if (!hasEventId) {
+    return (
+      <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">Invalid event link.</p>
+      </div>
+    );
+  }
+
+  if (isEventUninitialized || isLoadingEvent) {
     return (
       <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
         <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading event...</p>
+      </div>
+    );
+  }
+
+  const eventStatus = Number((eventError as EventApiError | undefined)?.status);
+  const isNotFoundError = hasEventError && eventStatus === 404;
+
+  if (hasEventError && !isNotFoundError) {
+    return (
+      <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <p className="text-sm text-red-600">Failed to load event details.</p>
+        <button
+          type="button"
+          onClick={() => refetchEvent()}
+          className="mt-3 inline-flex h-8 items-center justify-center rounded-md border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900/40"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -76,7 +111,7 @@ export function DashboardInventoryEventClient({ eventId }: { eventId: string }) 
         }).unwrap();
       } else {
         await createInventory({
-          eventId,
+          eventId: normalizedEventId,
           ticketType: ticketType as TicketType,
           price: priceLkr,
           totalQuantity: ticketCount,
