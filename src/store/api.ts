@@ -291,10 +291,31 @@ function normalizeRefundRecord(input: Partial<RefundRecord> & Record<string, unk
   };
 }
 
+function toApiOriginFromFrontend(origin: string): string {
+  try {
+    const url = new URL(origin);
+    const host = url.hostname.toLowerCase();
+    if (host === "dev.phoenix-project.online") {
+      return `${url.protocol}//api-dev.phoenix-project.online`;
+    }
+    if (host === "phoenix-project.online") {
+      return `${url.protocol}//api.phoenix-project.online`;
+    }
+  } catch {
+    // Fall through to the original value when parsing fails.
+  }
+  return origin;
+}
+
 /** Backend origin (no trailing slash). Override via NEXT_PUBLIC_API_BASE_URL for production builds. */
 function getPublicApiBaseUrl(): string {
   const raw = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
-  if (raw) return raw.replace(/\/+$/, "");
+  if (raw) return toApiOriginFromFrontend(raw).replace(/\/+$/, "");
+
+  if (typeof window !== "undefined") {
+    return toApiOriginFromFrontend(window.location.origin).replace(/\/+$/, "");
+  }
+
   return "http://localhost:8080";
 }
 
