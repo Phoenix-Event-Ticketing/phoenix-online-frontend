@@ -7,12 +7,20 @@ export async function generateStaticParams() {
   return getEventStaticParams();
 }
 
-export default function DashboardEventDetailsPage({
+export default async function DashboardEventDetailsPage({
   params,
 }: {
-  params: { eventId: string };
+  params: Promise<{ eventId: string }>;
 }) {
-  const { eventId } = params;
-  return <DashboardEventDetailsClient eventId={eventId} />;
+  const { eventId } = await params;
+  const safeEventId = (() => {
+    try {
+      return decodeURIComponent(eventId).trim();
+    } catch {
+      return eventId.trim();
+    }
+  })();
+
+  return <DashboardEventDetailsClient eventId={safeEventId} />;
 }
 
