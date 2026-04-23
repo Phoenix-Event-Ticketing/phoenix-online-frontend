@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { getPersistedAccessToken } from "@/lib/auth-ui";
 import { formatEventDateTime, formatLkr } from "@/lib/events";
 import {
   type HoldActionResponse,
@@ -16,7 +18,10 @@ import {
 import { useAppSelector } from "@/store/hooks";
 
 export function PublicBookingClient({ eventId }: { eventId: string }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const user = useAppSelector((s) => s.session.user);
+  const hasToken = Boolean(getPersistedAccessToken());
   const { data: event } = useGetEventQuery(eventId, { skip: !eventId });
   const { data: inventory } = useGetEventInventoryAvailabilityQuery(eventId, {
     skip: !eventId,
@@ -259,6 +264,18 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
               {bookingError ? (
                 <p className="mt-3 text-sm text-red-600">{bookingError}</p>
               ) : null}
+              {!user || !hasToken ? (
+                <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
+                  Please{" "}
+                  <Link
+                    href={{ pathname, query: { auth: "signin" } }}
+                    className="font-medium underline"
+                  >
+                    sign in
+                  </Link>{" "}
+                  to continue with booking.
+                </p>
+              ) : null}
               {holdResponse ? (
                 <p className="mt-3 text-sm text-emerald-700">
                   Hold status: {holdResponse.holdStatus}
@@ -268,9 +285,13 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
 
               <button
                 type="button"
-                disabled={!selected || maxQty <= 0}
+                disabled={!selected || maxQty <= 0 || !user || !hasToken}
                 className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
                 onClick={async () => {
+                  if (!user || !hasToken) {
+                    router.replace(`${pathname}?auth=signin`);
+                    return;
+                  }
                   if (!selected) return;
                   setBookingError(null);
                   const bookingId = `book_${Date.now().toString(36)}`;
@@ -286,12 +307,12 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                     setHoldResponse(confirmed);
                     const createdBooking = await createBooking({
                       eventId,
-                      customerEmail: user?.email ?? "guest@example.com",
+                      customerEmail: user.email,
                       ticketType: selected.ticketType,
                       quantity: clampedQty,
                       totalAmount: total ?? selected.price,
                       seat: "AUTO",
-                      userId: user?.id ?? "guest-user",
+                      userId: user.id,
                     }).unwrap();
                     await startBookingPayment(createdBooking.bookingId).unwrap();
                   } catch {

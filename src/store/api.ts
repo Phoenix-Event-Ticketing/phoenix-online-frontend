@@ -1,7 +1,10 @@
 import {
+  type BaseQueryFn,
   createApi,
   fetchBaseQuery,
+  type FetchArgs,
   type FetchBaseQueryError,
+  type FetchBaseQueryMeta,
 } from "@reduxjs/toolkit/query/react";
 import { getPersistedAccessToken } from "@/lib/auth-ui";
 import type { EventSummary } from "@/lib/events";
@@ -273,10 +276,106 @@ const rawBaseQuery = fetchBaseQuery({
   },
 });
 
+type ProtectedRouteRule = {
+  method: string;
+  testPath: (path: string) => boolean;
+};
+
+const protectedRouteRules: ProtectedRouteRule[] = [
+  // User management APIs are protected (except login/register).
+  { method: "POST", testPath: (path) => path === "/users/batch" },
+  { method: "PUT", testPath: (path) => /^\/users\/[^/]+$/.test(path) },
+  { method: "PUT", testPath: (path) => /^\/users\/[^/]+\/role$/.test(path) },
+  // Event write endpoints are protected.
+  { method: "POST", testPath: (path) => path === "/events" },
+  { method: "PUT", testPath: (path) => /^\/events\/[^/]+$/.test(path) },
+  { method: "PATCH", testPath: (path) => /^\/events\/[^/]+\/publish$/.test(path) },
+  { method: "PATCH", testPath: (path) => /^\/events\/[^/]+\/cancel$/.test(path) },
+  // Inventory APIs are protected.
+  { method: "GET", testPath: (path) => /^\/inventory\/event\/[^/]+$/.test(path) },
+  { method: "GET", testPath: (path) => /^\/inventory\/event\/[^/]+\/availability$/.test(path) },
+  { method: "GET", testPath: (path) => /^\/inventory\/[^/]+$/.test(path) },
+  { method: "POST", testPath: (path) => path === "/inventory" || path === "/inventory/bulk" },
+  { method: "PUT", testPath: (path) => /^\/inventory\/[^/]+$/.test(path) },
+  { method: "POST", testPath: (path) => path === "/inventory/hold" },
+  { method: "POST", testPath: (path) => path === "/inventory/confirm" },
+  { method: "POST", testPath: (path) => path === "/inventory/release" },
+  // Booking APIs are protected for frontend users.
+  { method: "POST", testPath: (path) => path === "/bookings" },
+  { method: "GET", testPath: (path) => path === "/bookings" },
+  { method: "GET", testPath: (path) => /^\/bookings\/customer\/[^/]+$/.test(path) },
+  { method: "GET", testPath: (path) => /^\/bookings\/[^/]+$/.test(path) },
+  { method: "PATCH", testPath: (path) => /^\/bookings\/[^/]+$/.test(path) },
+  { method: "PATCH", testPath: (path) => /^\/bookings\/[^/]+\/cancel$/.test(path) },
+  { method: "POST", testPath: (path) => /^\/bookings\/[^/]+\/start-payment$/.test(path) },
+  // Payment/refund APIs are protected.
+  { method: "GET", testPath: (path) => path === "/payments" || /^\/payments\/[^/]+$/.test(path) },
+  { method: "POST", testPath: (path) => path === "/payments" },
+  { method: "PATCH", testPath: (path) => /^\/payments\/[^/]+\/status$/.test(path) },
+  { method: "PATCH", testPath: (path) => /^\/payments\/[^/]+\/cancel$/.test(path) },
+  { method: "POST", testPath: (path) => path === "/refunds" },
+  { method: "PATCH", testPath: (path) => /^\/refunds\/[^/]+\/status$/.test(path) },
+  { method: "GET", testPath: (path) => /^\/refunds\/[^/]+$/.test(path) },
+  { method: "GET", testPath: (path) => /^\/refunds\/payment\/[^/]+$/.test(path) },
+];
+
+function normalizePath(url: string): string {
+  const pathOnly = url.split("?")[0]?.trim() ?? "";
+  if (!pathOnly) return "/";
+  return pathOnly.startsWith("/") ? pathOnly : `/${pathOnly}`;
+}
+
+function shouldRequireAuth(arg: string | FetchArgs): boolean {
+  const url = typeof arg === "string" ? arg : arg.url;
+  const method = (typeof arg === "string" ? "GET" : arg.method ?? "GET").toUpperCase();
+  const path = normalizePath(url);
+  return protectedRouteRules.some((rule) => rule.method === method && rule.testPath(path));
+}
+
+function redirectToSignIn(): void {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (url.searchParams.get("auth") === "signin") return;
+  url.searchParams.set("auth", "signin");
+  window.location.assign(url.toString());
+}
+
+const unauthorizedError = {
+  status: 401 as const,
+  data: {
+    success: false as const,
+    error: {
+      code: "AUTH_REQUIRED",
+      message: "Authentication is required",
+    },
+  },
+};
+
+const baseQueryWithAuthGuard: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError, object, FetchBaseQueryMeta> = async (
+  arg,
+  api,
+  extraOptions,
+) => {
+  const requiresAuth = shouldRequireAuth(arg);
+  const token = getPersistedAccessToken();
+
+  if (requiresAuth && !token) {
+    redirectToSignIn();
+    return { error: unauthorizedError };
+  }
+
+  const result = await rawBaseQuery(arg, api, extraOptions);
+  const status = "error" in result ? result.error?.status : undefined;
+  if (requiresAuth && (status === 401 || status === 403)) {
+    redirectToSignIn();
+  }
+  return result;
+};
+
 export const api = createApi({
   reducerPath: "api",
   tagTypes: ["Event", "Inventory", "Payment", "Refund", "Booking"],
-  baseQuery: rawBaseQuery,
+  baseQuery: baseQueryWithAuthGuard,
   endpoints: (builder) => ({
     signIn: builder.mutation<AuthResponse, LoginRequest>({
       query: (body) => ({ url: "/users/login", method: "POST", body }),
