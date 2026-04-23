@@ -35,13 +35,23 @@ export default function DashboardInventoryPage() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <h2 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
-          Inventory
-        </h2>
-        {isLoading ? (
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Loading events...</p>
-        ) : null}
-        {isError ? <p className="mt-1 text-sm text-red-600">Failed to load events.</p> : null}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+              Inventory
+            </h2>
+            {isLoading ? (
+              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Loading events...</p>
+            ) : null}
+            {isError ? <p className="mt-1 text-sm text-red-600">Failed to load events.</p> : null}
+          </div>
+          <Link
+            href="/dashboard/inventory/add"
+            className="inline-flex h-9 items-center justify-center rounded-md bg-zinc-900 px-3 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+          >
+            Add inventory
+          </Link>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
