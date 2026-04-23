@@ -5,6 +5,7 @@ import { formatEventDateTime, formatLkr } from "@/lib/events";
 import {
   type ApiEnvelopeError,
   useCancelBookingMutation,
+  useCompletePaymentMutation,
   useListBookingsQuery,
   useStartBookingPaymentMutation,
 } from "@/store/api";
@@ -39,6 +40,7 @@ export default function DashboardBookingsPage() {
   const { data: bookings = [], isLoading, isError } = useListBookingsQuery();
   const [cancelBooking, { isLoading: isCancelling }] = useCancelBookingMutation();
   const [startBookingPayment, { isLoading: isStartingPayment }] = useStartBookingPaymentMutation();
+  const [completePayment, { isLoading: isCompletingPayment }] = useCompletePaymentMutation();
   const [apiError, setApiError] = useState<string | null>(null);
 
   function parseError(error: unknown, fallback: string) {
@@ -185,7 +187,7 @@ export default function DashboardBookingsPage() {
               <div className="col-span-1 flex justify-end">
                 <button
                   type="button"
-                  disabled={isCancelling || isStartingPayment}
+                  disabled={isCancelling || isStartingPayment || isCompletingPayment}
                   onClick={async () => {
                     try {
                       setApiError(null);
@@ -200,7 +202,7 @@ export default function DashboardBookingsPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={isCancelling || isStartingPayment}
+                  disabled={isCancelling || isStartingPayment || isCompletingPayment}
                   onClick={async () => {
                     try {
                       setApiError(null);
@@ -212,6 +214,31 @@ export default function DashboardBookingsPage() {
                   className="ml-2 rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
                 >
                   Start pay
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    isCancelling ||
+                    isStartingPayment ||
+                    isCompletingPayment ||
+                    !b.paymentReferenceId ||
+                    b.bookingStatus !== "AWAITING_PAYMENT"
+                  }
+                  onClick={async () => {
+                    if (!b.paymentReferenceId) return;
+                    try {
+                      setApiError(null);
+                      await completePayment({
+                        id: b.paymentReferenceId,
+                        status: "SUCCESS",
+                      }).unwrap();
+                    } catch (error) {
+                      setApiError(parseError(error, "Failed to complete payment."));
+                    }
+                  }}
+                  className="ml-2 rounded-md border border-emerald-300 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900/60 dark:text-emerald-200 dark:hover:bg-emerald-950/30"
+                >
+                  Complete
                 </button>
               </div>
             </div>

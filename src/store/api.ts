@@ -181,6 +181,10 @@ export type UpdatePaymentStatusRequest = {
   id: string;
   status: PaymentStatus;
 };
+export type CompletePaymentRequest = {
+  id: string;
+  status: "SUCCESS" | "FAILED";
+};
 export type CreateRefundRequest = {
   paymentId: string;
   refundAmount: number;
@@ -399,6 +403,7 @@ const protectedRouteRules: ProtectedRouteRule[] = [
   // Payment/refund APIs are protected.
   { method: "GET", testPath: (path) => path === "/payments" || /^\/payments\/[^/]+$/.test(path) },
   { method: "POST", testPath: (path) => path === "/payments" },
+  { method: "POST", testPath: (path) => /^\/payments\/[^/]+\/complete$/.test(path) },
   { method: "PATCH", testPath: (path) => /^\/payments\/[^/]+\/status$/.test(path) },
   { method: "PATCH", testPath: (path) => /^\/payments\/[^/]+\/cancel$/.test(path) },
   { method: "POST", testPath: (path) => path === "/refunds" },
@@ -677,6 +682,21 @@ export const api = createApi({
         { type: "Payment", id: "LIST" },
       ],
     }),
+    completePayment: builder.mutation<PaymentRecord, CompletePaymentRequest>({
+      query: ({ id, status }) => ({
+        url: `/payments/${encodeURIComponent(id)}/complete`,
+        method: "POST",
+        body: { status },
+      }),
+      transformResponse: (response: ServiceEnvelope<PaymentRecord>) =>
+        normalizePaymentRecord(
+          (response.data ?? {}) as Partial<PaymentRecord> & Record<string, unknown>,
+        ),
+      invalidatesTags: (_result, _err, arg) => [
+        { type: "Payment", id: arg.id },
+        { type: "Payment", id: "LIST" },
+      ],
+    }),
     cancelPayment: builder.mutation<PaymentRecord, string>({
       query: (id) => ({ url: `/payments/${encodeURIComponent(id)}/cancel`, method: "PATCH" }),
       transformResponse: (response: ServiceEnvelope<PaymentRecord>) =>
@@ -851,6 +871,7 @@ export const {
   useGetPaymentByIdQuery,
   useCreatePaymentMutation,
   useUpdatePaymentStatusMutation,
+  useCompletePaymentMutation,
   useCancelPaymentMutation,
   useCreateRefundMutation,
   useUpdateRefundStatusMutation,

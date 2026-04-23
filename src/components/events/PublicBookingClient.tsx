@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { getPersistedAccessToken } from "@/lib/auth-ui";
 import { formatEventDateTime, formatLkr } from "@/lib/events";
 import {
+  useCompletePaymentMutation,
   useCreateBookingMutation,
   useGetEventInventoryAvailabilityQuery,
   useGetEventQuery,
@@ -29,7 +30,9 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [createBooking] = useCreateBookingMutation();
   const [startBookingPayment] = useStartBookingPaymentMutation();
+  const [completePayment] = useCompletePaymentMutation();
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
 
   const firstAvailable = useMemo(() => {
     return rates.find((r) => r.availableQuantity > 0)?.ticketType ?? rates[0]?.ticketType ?? "";
@@ -257,6 +260,9 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
               {bookingError ? (
                 <p className="mt-3 text-sm text-red-600">{bookingError}</p>
               ) : null}
+              {bookingSuccess ? (
+                <p className="mt-3 text-sm text-emerald-600">{bookingSuccess}</p>
+              ) : null}
               {!user || !hasToken ? (
                 <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
                   Please{" "}
@@ -280,6 +286,7 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                   }
                   if (!selected) return;
                   setBookingError(null);
+                  setBookingSuccess(null);
                   setIsProcessing(true);
                   try {
                     const createdBooking = await createBooking({
@@ -291,9 +298,24 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                       seat: "AUTO",
                       userId: user.id,
                     }).unwrap();
-                    await startBookingPayment(createdBooking.bookingId).unwrap();
-                  } catch {
-                    setBookingError("Could not reserve tickets. Please try again.");
+                    const paymentSession = await startBookingPayment(createdBooking.bookingId).unwrap();
+                    await completePayment({
+                      id: paymentSession.paymentReferenceId,
+                      status: "SUCCESS",
+                    }).unwrap();
+                    setBookingSuccess("Booking confirmed and tickets marked as sold.");
+                    router.push("/dashboard/bookings");
+                  } catch (error) {
+                    const maybeMessage =
+                      typeof error === "object" &&
+                      error !== null &&
+                      "data" in error &&
+                      typeof (error as { data?: { message?: string } }).data?.message === "string"
+                        ? (error as { data?: { message?: string } }).data?.message
+                        : "";
+                    setBookingError(
+                      maybeMessage || "Could not complete booking payment. Please try again.",
+                    );
                   } finally {
                     setIsProcessing(false);
                   }
