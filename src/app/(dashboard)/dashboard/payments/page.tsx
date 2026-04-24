@@ -70,6 +70,15 @@ export default function DashboardPaymentsPage() {
     () => payments.reduce((sum, p) => sum + p.amount, 0),
     [payments],
   );
+  const visiblePayments = useMemo(
+    () =>
+      isAdmin
+        ? payments.filter(
+            (payment) => payment.paymentMethod === "BANK_TRANSFER" && payment.status === "PENDING",
+          )
+        : payments,
+    [isAdmin, payments],
+  );
   const totalRefunds = useMemo(
     () => refunds.reduce((sum, r) => sum + r.refundAmount, 0),
     [refunds],
@@ -137,7 +146,11 @@ export default function DashboardPaymentsPage() {
         <h2 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
           Payments
         </h2>
-        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Live payment service data.</p>
+        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+          {isAdmin
+            ? "Review and approve pending bank transfer payments."
+            : "Live payment service data."}
+        </p>
         {isLoading ? <p className="mt-2 text-sm text-zinc-600">Loading payments...</p> : null}
         {isError ? <p className="mt-2 text-sm text-red-600">Failed to load payments.</p> : null}
         {paymentError ? <p className="mt-2 text-sm text-red-600">{paymentError}</p> : null}
@@ -157,7 +170,7 @@ export default function DashboardPaymentsPage() {
               </tr>
             </thead>
             <tbody>
-              {payments.map((payment) => (
+              {visiblePayments.map((payment) => (
                 <tr key={payment.paymentId} className="border-b border-zinc-100 dark:border-zinc-900">
                   <td className="px-2 py-3 font-medium text-zinc-900 dark:text-zinc-100">
                     {payment.paymentId}
@@ -265,6 +278,13 @@ export default function DashboardPaymentsPage() {
                   </td>
                 </tr>
               ))}
+              {!visiblePayments.length ? (
+                <tr>
+                  <td colSpan={8} className="px-2 py-4 text-sm text-zinc-500 dark:text-zinc-400">
+                    {isAdmin ? "No pending bank transfer payments." : "No payments found."}
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
