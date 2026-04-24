@@ -51,7 +51,7 @@ export function AuthModal({ mode, onClose }: { mode: Mode; onClose: () => void }
       id: user.id,
       email: user.email,
       name: user.name,
-      roles: user.roles ?? ["USER"],
+      roles: user.roles?.length ? user.roles : user.role ? [user.role] : ["USER"],
     };
   }
 

@@ -49,6 +49,14 @@ type AuthResponse = {
 };
 type BatchUsersResponse = { users?: ApiUser[] };
 
+function normalizeAuthResponse(input: AuthResponse): AuthResponse {
+  if (!input.user) return input;
+  return {
+    ...input,
+    user: normalizeApiUser(input.user as ApiUser & { role?: UserRole }),
+  };
+}
+
 function normalizeApiUser(input: ApiUser & { role?: UserRole }): ApiUser {
   const roleFromArray = input.roles?.[0];
   const resolvedRole = input.role ?? roleFromArray;
@@ -472,9 +480,11 @@ export const api = createApi({
   endpoints: (builder) => ({
     signIn: builder.mutation<AuthResponse, LoginRequest>({
       query: (body) => ({ url: "/users/login", method: "POST", body }),
+      transformResponse: (response: AuthResponse) => normalizeAuthResponse(response),
     }),
     signUp: builder.mutation<AuthResponse, RegisterRequest>({
       query: (body) => ({ url: "/users/register", method: "POST", body }),
+      transformResponse: (response: AuthResponse) => normalizeAuthResponse(response),
     }),
     batchUsers: builder.mutation<ApiUser[], BatchUsersRequest>({
       query: (body) => ({ url: "/users/batch", method: "POST", body }),
