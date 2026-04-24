@@ -32,7 +32,6 @@ export default function DashboardPaymentsPage() {
       refetchOnMountOrArgChange: true,
       refetchOnFocus: true,
       refetchOnReconnect: true,
-      pollingInterval: 5000,
     },
   );
   const [selectedPaymentId, setSelectedPaymentId] = useState<string>("");
@@ -70,15 +69,12 @@ export default function DashboardPaymentsPage() {
     () => payments.reduce((sum, p) => sum + p.amount, 0),
     [payments],
   );
-  const visiblePayments = useMemo(
-    () =>
-      isAdmin
-        ? payments.filter(
-            (payment) => payment.paymentMethod === "BANK_TRANSFER" && payment.status === "PENDING",
-          )
-        : payments,
-    [isAdmin, payments],
-  );
+  const visiblePayments = useMemo(() => {
+    if (isAdmin) return payments;
+    const currentUserId = user?.id;
+    if (!currentUserId) return [];
+    return payments.filter((payment) => payment.userId === currentUserId);
+  }, [isAdmin, payments, user?.id]);
   const totalRefunds = useMemo(
     () => refunds.reduce((sum, r) => sum + r.refundAmount, 0),
     [refunds],
