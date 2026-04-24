@@ -1,17 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { getPersistedAccessToken } from "@/lib/auth-ui";
 import { formatEventDateTime, formatLkr } from "@/lib/events";
 import { useGetEventQuery, useGetEventInventoryAvailabilityQuery } from "@/store/api";
 
 export function PublicEventDetailsClient({ eventId }: { eventId: string }) {
-  const hasToken = Boolean(getPersistedAccessToken());
   const { data: event, isLoading, isError } = useGetEventQuery(eventId, {
     skip: !eventId,
   });
   const { data: inventory } = useGetEventInventoryAvailabilityQuery(eventId, {
-    skip: !eventId || !hasToken,
+    skip: !eventId,
   });
   if (isLoading) {
     return (
@@ -32,7 +30,7 @@ export function PublicEventDetailsClient({ eventId }: { eventId: string }) {
   }
 
   const location = [event.venue, event.city].filter(Boolean).join(", ");
-  const rates = hasToken ? (inventory?.items ?? []) : [];
+  const rates = inventory?.items ?? [];
   const hasAvailableTickets = rates.some((rate) => rate.availableQuantity > 0);
 
   return (
@@ -99,16 +97,6 @@ export function PublicEventDetailsClient({ eventId }: { eventId: string }) {
                   </p>
                 ) : null}
               </div>
-              {!hasToken ? (
-                <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
-                  Please{" "}
-                  <Link href={{ pathname: `/events/${event.eventId}`, query: { auth: "signin" } }} className="font-medium underline">
-                    sign in
-                  </Link>{" "}
-                  to view live inventory availability.
-                </p>
-              ) : null}
-
               <div className="mt-4 overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
                 <div className="grid grid-cols-3 bg-zinc-50 px-4 py-2 text-xs font-medium text-zinc-600 dark:bg-zinc-900/40 dark:text-zinc-300">
                   <p>Type</p>

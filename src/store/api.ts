@@ -383,9 +383,7 @@ const protectedRouteRules: ProtectedRouteRule[] = [
   { method: "PUT", testPath: (path) => /^\/events\/[^/]+$/.test(path) },
   { method: "PATCH", testPath: (path) => /^\/events\/[^/]+\/publish$/.test(path) },
   { method: "PATCH", testPath: (path) => /^\/events\/[^/]+\/cancel$/.test(path) },
-  // Inventory APIs are protected.
-  { method: "GET", testPath: (path) => /^\/inventory\/event\/[^/]+$/.test(path) },
-  { method: "GET", testPath: (path) => /^\/inventory\/event\/[^/]+\/availability$/.test(path) },
+  // Inventory mutation/admin APIs are protected.
   { method: "GET", testPath: (path) => /^\/inventory\/[^/]+$/.test(path) },
   { method: "POST", testPath: (path) => path === "/inventory" || path === "/inventory/bulk" },
   { method: "PUT", testPath: (path) => /^\/inventory\/[^/]+$/.test(path) },
