@@ -12,6 +12,7 @@ import {
   useUpdatePaymentStatusMutation,
   useUpdateRefundStatusMutation,
 } from "@/store/api";
+import { RequireRole } from "@/components/dashboard/RequireRole";
 import { useAppSelector } from "@/store/hooks";
 
 function money(amount: number, currency: string) {
@@ -78,7 +79,8 @@ export default function DashboardPaymentsPage() {
   );
 
   return (
-    <div className="space-y-4">
+    <RequireRole tab="payments">
+      <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
           <p className="text-xs text-zinc-500 dark:text-zinc-400">Payments</p>
@@ -349,6 +351,7 @@ export default function DashboardPaymentsPage() {
           </table>
         </div>
       </section>
-    </div>
+      </div>
+    </RequireRole>
   );
 }

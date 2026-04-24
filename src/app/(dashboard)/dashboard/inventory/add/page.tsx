@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { RequireRole } from "@/components/dashboard/RequireRole";
 import { formatEventDateTime } from "@/lib/events";
 import {
   type EventApiError,
@@ -65,7 +66,8 @@ export default function AddInventoryPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <RequireRole tab="inventory">
+      <div className="space-y-4">
       <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -178,6 +180,7 @@ export default function AddInventoryPage() {
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </RequireRole>
   );
 }

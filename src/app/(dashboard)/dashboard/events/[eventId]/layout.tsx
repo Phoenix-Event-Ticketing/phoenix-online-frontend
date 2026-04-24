@@ -1,4 +1,5 @@
 import { getEventStaticParams } from "@/lib/event-static-params";
+import { RequireRole } from "@/components/dashboard/RequireRole";
 
 export const dynamicParams = false;
 
@@ -11,5 +12,5 @@ export default function DashboardEventSegmentLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return children;
+  return <RequireRole tab="events">{children}</RequireRole>;
 }

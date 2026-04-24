@@ -1,7 +1,9 @@
+import { RequireRole } from "@/components/dashboard/RequireRole";
+
 export default function DashboardInventoryEventSegmentLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return children;
+  return <RequireRole tab="inventory">{children}</RequireRole>;
 }
