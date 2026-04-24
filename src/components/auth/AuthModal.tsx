@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { persistUiSession } from "@/lib/auth-ui";
-import { useAppDispatch } from "@/store/hooks";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { setSession, type SessionUser } from "@/store/sessionSlice";
 import { useSignInMutation, useSignUpMutation, type ApiUser } from "@/store/api";
 
@@ -16,13 +16,20 @@ type MutationErrorLike = {
 export function AuthModal({ mode, onClose }: { mode: Mode; onClose: () => void }) {
   const router = useRouter();
   const dispatch = useAppDispatch();
+  const sessionStatus = useAppSelector((s) => s.session.status);
   const [tab, setTab] = useState<Mode>(mode);
 
   useEffect(() => setTab(mode), [mode]);
+  useEffect(() => {
+    if (sessionStatus === "authenticated") {
+      onClose();
+    }
+  }, [sessionStatus, onClose]);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -153,6 +160,7 @@ export function AuthModal({ mode, onClose }: { mode: Mode; onClose: () => void }
                 if (tab === "signup") {
                   await signUp({ email: cleanEmail, password, name: name.trim() || undefined }).unwrap();
                   setPassword("");
+                  setShowPassword(false);
                   setTab("signin");
                   setInfo("Account created. Please sign in to continue.");
                 } else {
@@ -168,8 +176,8 @@ export function AuthModal({ mode, onClose }: { mode: Mode; onClose: () => void }
                   };
                   persistUiSession(session);
                   dispatch(setSession(session));
-                  onClose();
-                  router.push("/dashboard");
+                  setShowPassword(false);
+                  router.replace("/dashboard");
                   router.refresh();
                 }
               } catch (e) {
@@ -212,14 +220,24 @@ export function AuthModal({ mode, onClose }: { mode: Mode; onClose: () => void }
               <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
                 Password
               </span>
-              <input
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                type="password"
-                autoComplete={tab === "signin" ? "current-password" : "new-password"}
-                required
-                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 shadow-sm outline-none ring-zinc-950/10 focus:ring-4 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:ring-zinc-50/10"
-              />
+              <div className="relative mt-1">
+                <input
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  type={showPassword ? "text" : "password"}
+                  autoComplete={tab === "signin" ? "current-password" : "new-password"}
+                  required
+                  className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 pr-12 text-sm text-zinc-950 shadow-sm outline-none ring-zinc-950/10 focus:ring-4 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:ring-zinc-50/10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute inset-y-0 right-2 inline-flex items-center justify-center px-2 text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
             </label>
 
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
