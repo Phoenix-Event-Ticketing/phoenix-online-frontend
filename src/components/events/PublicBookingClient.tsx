@@ -6,9 +6,11 @@ import { useMemo, useState } from "react";
 import { getPersistedAccessToken } from "@/lib/auth-ui";
 import { formatEventDateTime, formatLkr } from "@/lib/events";
 import {
+  useCompletePaymentMutation,
   useCreateBookingMutation,
   useGetEventInventoryAvailabilityQuery,
   useGetEventQuery,
+  useStartBookingPaymentMutation,
 } from "@/store/api";
 import { useAppSelector } from "@/store/hooks";
 
@@ -27,6 +29,8 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
   );
   const [isProcessing, setIsProcessing] = useState(false);
   const [createBooking] = useCreateBookingMutation();
+  const [startBookingPayment] = useStartBookingPaymentMutation();
+  const [completePayment] = useCompletePaymentMutation();
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -395,8 +399,27 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                       seat: "AUTO",
                       userId: user.id,
                     }).unwrap();
+                    const paymentSession = await startBookingPayment({
+                      bookingId: createdBooking.bookingId,
+                      paymentMethod,
+                    }).unwrap();
+
+                    if (paymentMethod === "BANK_TRANSFER") {
+                      setBookingSuccess(
+                        `Booking ${createdBooking.bookingId} is awaiting bank transfer approval. An admin will confirm the payment.`,
+                      );
+                      setShowPaymentModal(false);
+                      router.push("/dashboard/bookings");
+                      return;
+                    }
+
+                    await completePayment({
+                      id: paymentSession.paymentReferenceId,
+                      status: "SUCCESS",
+                      paymentMethod,
+                    }).unwrap();
                     setBookingSuccess(
-                      `Booking ${createdBooking.bookingId} created with ${paymentMethod}. Continue in Dashboard Payments.`,
+                      `Payment approved via ${paymentMethod}. Booking ${createdBooking.bookingId} is confirmed.`,
                     );
                     setShowPaymentModal(false);
                     router.push("/dashboard/bookings");

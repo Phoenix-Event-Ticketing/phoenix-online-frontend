@@ -233,6 +233,50 @@ export default function DashboardPaymentsPage() {
                   </td>
                   <td className="px-2 py-3 text-right">
                     <div className="flex justify-end gap-2">
+                      {isAdmin &&
+                      payment.paymentMethod === "BANK_TRANSFER" &&
+                      payment.status === "PENDING" ? (
+                        <>
+                          <button
+                            type="button"
+                            disabled={updatingPaymentStatus}
+                            onClick={async () => {
+                              try {
+                                setPaymentError(null);
+                                await updatePaymentStatus({
+                                  id: payment.paymentId,
+                                  status: "SUCCESS",
+                                  paymentMethod: "BANK_TRANSFER",
+                                }).unwrap();
+                              } catch (error) {
+                                setPaymentError(parseError(error, "Failed to approve bank transfer."));
+                              }
+                            }}
+                            className="rounded-md border border-emerald-300 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-60 dark:border-emerald-900/60 dark:text-emerald-200 dark:hover:bg-emerald-950/30"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            disabled={updatingPaymentStatus}
+                            onClick={async () => {
+                              try {
+                                setPaymentError(null);
+                                await updatePaymentStatus({
+                                  id: payment.paymentId,
+                                  status: "FAILED",
+                                  paymentMethod: "BANK_TRANSFER",
+                                }).unwrap();
+                              } catch (error) {
+                                setPaymentError(parseError(error, "Failed to reject bank transfer."));
+                              }
+                            }}
+                            className="rounded-md border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20"
+                          >
+                            Reject
+                          </button>
+                        </>
+                      ) : null}
                       {isUser &&
                       (payment.status === "FAILED" || payment.status === "CANCELLED") ? (
                         <button
