@@ -2,19 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { canAccessTab, type DashboardTabKey } from "@/components/dashboard/access";
+import { useAppSelector } from "@/store/hooks";
 
 const items = [
-  { href: "/dashboard", label: "Overview", exact: true },
-  { href: "/dashboard/events", label: "Events", exact: false },
-  { href: "/dashboard/payments", label: "Payments", exact: false },
-  { href: "/dashboard/bookings", label: "Bookings", exact: false },
-  { href: "/dashboard/inventory", label: "Inventory", exact: false },
-  { href: "/dashboard/users", label: "Users", exact: false },
-  { href: "/dashboard/settings", label: "Settings", exact: false },
+  { href: "/dashboard", label: "Overview", exact: true, tab: "overview" },
+  { href: "/dashboard/events", label: "Events", exact: false, tab: "events" },
+  { href: "/dashboard/payments", label: "Payments", exact: false, tab: "payments" },
+  { href: "/dashboard/bookings", label: "Bookings", exact: false, tab: "bookings" },
+  { href: "/dashboard/inventory", label: "Inventory", exact: false, tab: "inventory" },
+  { href: "/dashboard/users", label: "Users", exact: false, tab: "users" },
+  { href: "/dashboard/settings", label: "Settings", exact: false, tab: "settings" },
 ] as const;
 
 export function DashboardSidebar() {
   const pathname = usePathname();
+  const roles = useAppSelector((s) => s.session.user?.roles);
+  const visibleItems = items.filter((item) => canAccessTab(item.tab as DashboardTabKey, roles));
 
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
@@ -27,7 +31,7 @@ export function DashboardSidebar() {
         </Link>
       </div>
       <nav className="flex flex-col gap-0.5 p-2">
-        {items.map((item) => {
+        {visibleItems.map((item) => {
           const active = item.exact
             ? pathname === item.href
             : pathname.startsWith(item.href);

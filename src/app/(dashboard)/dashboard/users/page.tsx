@@ -1,6 +1,11 @@
 import { UsersAdminPanel } from "@/components/users/UsersAdminPanel";
+import { RequireRole } from "@/components/dashboard/RequireRole";
 
 export default function DashboardUsersPage() {
-  return <UsersAdminPanel />;
+  return (
+    <RequireRole tab="users">
+      <UsersAdminPanel />
+    </RequireRole>
+  );
 }
 

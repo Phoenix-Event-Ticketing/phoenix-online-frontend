@@ -1,6 +1,7 @@
  "use client";
 
 import { useState } from "react";
+import { RequireRole } from "@/components/dashboard/RequireRole";
 import { EventCard } from "@/components/events/EventCard";
 import { type EventStatus, type EventSummary } from "@/lib/events";
 import {
@@ -153,7 +154,8 @@ export default function DashboardEventsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <RequireRole tab="events">
+      <div className="space-y-4">
       <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -361,6 +363,7 @@ export default function DashboardEventsPage() {
           </div>
         </>
       ) : null}
-    </div>
+      </div>
+    </RequireRole>
   );
 }
