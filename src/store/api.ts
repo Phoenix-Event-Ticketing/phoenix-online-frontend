@@ -772,6 +772,23 @@ export const api = createApi({
         ),
       providesTags: (_result, _err, id) => [{ type: "Refund", id }],
     }),
+    listRefunds: builder.query<RefundRecord[], { all?: boolean } | void>({
+      query: (args) => ({
+        url: "/refunds",
+        params: args?.all ? { all: true } : undefined,
+      }),
+      transformResponse: (response: ServiceEnvelope<RefundRecord[]>) =>
+        (response.data ?? []).map((refund) =>
+          normalizeRefundRecord(refund as Partial<RefundRecord> & Record<string, unknown>),
+        ),
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((refund) => ({ type: "Refund" as const, id: refund.refundId })),
+              { type: "Refund" as const, id: "LIST" },
+            ]
+          : [{ type: "Refund", id: "LIST" }],
+    }),
     getRefundsByPaymentId: builder.query<RefundRecord[], string>({
       query: (paymentId) => ({
         url: `/refunds/payment/${encodeURIComponent(paymentId)}`,
@@ -915,6 +932,7 @@ export const {
   useCreateRefundMutation,
   useUpdateRefundStatusMutation,
   useGetRefundByIdQuery,
+  useListRefundsQuery,
   useGetRefundsByPaymentIdQuery,
   useCreateBookingMutation,
   useListBookingsQuery,
