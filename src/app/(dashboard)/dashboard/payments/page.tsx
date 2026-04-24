@@ -11,9 +11,9 @@ import {
   useCompletePaymentMutation,
   useCreateRefundMutation,
   useGetBookingsByCustomerEmailQuery,
-  useGetRefundsByPaymentIdQuery,
   useListBookingsQuery,
   useListPaymentsQuery,
+  useListRefundsQuery,
   useStartBookingPaymentMutation,
   useUpdatePaymentStatusMutation,
 } from "@/store/api";
@@ -60,9 +60,7 @@ export default function DashboardPaymentsPage() {
   const isLoadingBookings = isAdmin ? isLoadingBookingsAll : isLoadingBookingsOwn;
   const isErrorBookings = isAdmin ? isErrorBookingsAll : isErrorBookingsOwn;
   const [selectedPaymentId, setSelectedPaymentId] = useState<string>("");
-  const { data: refunds = [] } = useGetRefundsByPaymentIdQuery(selectedPaymentId, {
-    skip: !selectedPaymentId,
-  });
+  const { data: refunds = [] } = useListRefundsQuery(isAdmin ? { all: true } : undefined);
   const [updatePaymentStatus, { isLoading: updatingPaymentStatus }] =
     useUpdatePaymentStatusMutation();
   const [cancelPayment, { isLoading: cancellingPayment }] = useCancelPaymentMutation();
@@ -322,7 +320,9 @@ export default function DashboardPaymentsPage() {
                   <td className="px-2 py-3 text-right">
                     <div className="flex justify-end gap-2">
                       {isUser &&
-                      (payment.status === "FAILED" || payment.status === "CANCELLED") ? (
+                      (payment.status === "SUCCESS" ||
+                        payment.status === "FAILED" ||
+                        payment.status === "CANCELLED") ? (
                         <button
                           type="button"
                           onClick={() => {
@@ -340,7 +340,8 @@ export default function DashboardPaymentsPage() {
                           Refund
                         </button>
                       ) : null}
-                      {payment.status === "PENDING" && (isAdmin || isUser) ? (
+                      {((payment.status === "PENDING" && (isAdmin || isUser)) ||
+                        (payment.status === "PROCESSING" && isAdmin)) ? (
                         <button
                           type="button"
                           disabled={cancellingPayment}
@@ -413,7 +414,7 @@ export default function DashboardPaymentsPage() {
                   <td colSpan={7} className="px-2 py-4 text-sm text-zinc-500 dark:text-zinc-400">
                     {selectedPaymentId
                       ? "No refunds for the selected payment yet."
-                      : "Select a payment and click Refund to see refund history."}
+                      : "No refunds found."}
                   </td>
                 </tr>
               ) : null}
