@@ -70,23 +70,26 @@ export default function DashboardPaymentsPage() {
     () => refunds.reduce((sum, r) => sum + r.refundAmount, 0),
     [refunds],
   );
+  const paymentUserIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          payments
+            .map((p) => p.userId)
+            .filter((id): id is string => typeof id === "string" && id.trim().length > 0),
+        ),
+      ),
+    [payments],
+  );
 
   useEffect(() => {
-    const ids = Array.from(
-      new Set(
-        payments
-          .map((p) => p.userId)
-          .filter((id): id is string => typeof id === "string" && id.trim().length > 0),
-      ),
-    );
-    if (!ids.length) {
-      setUserMap({});
+    if (!paymentUserIds.length) {
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        const users = await batchUsers({ user_ids: ids }).unwrap();
+        const users = await batchUsers({ user_ids: paymentUserIds }).unwrap();
         if (cancelled) return;
         const nextMap: Record<string, ApiUser> = {};
         for (const u of users) {
@@ -100,7 +103,7 @@ export default function DashboardPaymentsPage() {
     return () => {
       cancelled = true;
     };
-  }, [payments, batchUsers]);
+  }, [paymentUserIds, batchUsers]);
 
   return (
     <RequireRole tab="payments">
@@ -160,7 +163,8 @@ export default function DashboardPaymentsPage() {
                     {payment.userId ? (
                       <div className="min-w-0">
                         <p className="truncate font-medium text-zinc-900 dark:text-zinc-100">
-                          {userMap[payment.userId]?.name || payment.userId}
+                          {(paymentUserIds.length ? userMap[payment.userId] : undefined)?.name ||
+                            payment.userId}
                         </p>
                         <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
                           {payment.userId}
