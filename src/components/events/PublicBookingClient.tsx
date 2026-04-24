@@ -401,10 +401,14 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                       seat: "AUTO",
                       userId: user.id,
                     }).unwrap();
-                    const paymentSession = await startBookingPayment(createdBooking.bookingId).unwrap();
+                    const paymentSession = await startBookingPayment({
+                      bookingId: createdBooking.bookingId,
+                      paymentMethod,
+                    }).unwrap();
                     await completePayment({
                       id: paymentSession.paymentReferenceId,
                       status: "SUCCESS",
+                      paymentMethod,
                     }).unwrap();
                     setBookingSuccess(`Payment approved via ${paymentMethod}. Redirecting...`);
                     setShowPaymentModal(false);

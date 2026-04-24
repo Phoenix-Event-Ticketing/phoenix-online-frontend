@@ -1,16 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  type ApiUser,
   type ApiEnvelopeError,
   type PaymentStatus,
+  useBatchUsersMutation,
   useCancelPaymentMutation,
-  useCreatePaymentMutation,
   useCreateRefundMutation,
   useGetRefundsByPaymentIdQuery,
   useListPaymentsQuery,
   useUpdatePaymentStatusMutation,
-  useUpdateRefundStatusMutation,
 } from "@/store/api";
 import { RequireRole } from "@/components/dashboard/RequireRole";
 import { useAppSelector } from "@/store/hooks";
@@ -25,6 +25,7 @@ function money(amount: number, currency: string) {
 export default function DashboardPaymentsPage() {
   const user = useAppSelector((s) => s.session.user);
   const isAdmin = !!user?.roles?.includes("ADMIN");
+  const isUser = !!user?.roles?.includes("USER");
   const { data: payments = [], isLoading, isError } = useListPaymentsQuery(
     isAdmin ? { all: true } : undefined,
   );
@@ -32,37 +33,29 @@ export default function DashboardPaymentsPage() {
   const { data: refunds = [] } = useGetRefundsByPaymentIdQuery(selectedPaymentId, {
     skip: !selectedPaymentId,
   });
-  const [createPayment, { isLoading: creatingPayment }] = useCreatePaymentMutation();
   const [updatePaymentStatus, { isLoading: updatingPaymentStatus }] =
     useUpdatePaymentStatusMutation();
   const [cancelPayment, { isLoading: cancellingPayment }] = useCancelPaymentMutation();
   const [createRefund, { isLoading: creatingRefund }] = useCreateRefundMutation();
-  const [updateRefundStatus, { isLoading: updatingRefundStatus }] =
-    useUpdateRefundStatusMutation();
+  const [batchUsers] = useBatchUsersMutation();
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [refundError, setRefundError] = useState<string | null>(null);
-  const [newPayment, setNewPayment] = useState({
-    bookingId: "",
-    amount: 0,
-    currency: "USD",
-    paymentMethod: "CARD",
-  });
-  const [newRefund, setNewRefund] = useState({
+  const [userMap, setUserMap] = useState<Record<string, ApiUser>>({});
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [refundDraft, setRefundDraft] = useState({
     paymentId: "",
     refundAmount: 0,
     refundReason: "",
   });
 
-  const PAYMENT_STATUS: PaymentStatus[] = [
-    "PENDING",
-    "PROCESSING",
-    "SUCCESS",
-    "FAILED",
-    "CANCELLED",
-    "REFUNDED",
-  ];
-  const REFUND_STATUS = ["REQUESTED", "APPROVED", "REJECTED", "COMPLETED"];
-
+  const PAYMENT_TRANSITIONS: Record<PaymentStatus, PaymentStatus[]> = {
+    PENDING: ["PROCESSING", "CANCELLED"],
+    PROCESSING: ["SUCCESS", "FAILED"],
+    SUCCESS: ["REFUNDED"],
+    FAILED: [],
+    CANCELLED: [],
+    REFUNDED: [],
+  };
   function parseError(error: unknown, fallback: string) {
     const candidate = error as ApiEnvelopeError;
     const message = candidate?.data?.error?.message;
@@ -77,6 +70,37 @@ export default function DashboardPaymentsPage() {
     () => refunds.reduce((sum, r) => sum + r.refundAmount, 0),
     [refunds],
   );
+
+  useEffect(() => {
+    const ids = Array.from(
+      new Set(
+        payments
+          .map((p) => p.userId)
+          .filter((id): id is string => typeof id === "string" && id.trim().length > 0),
+      ),
+    );
+    if (!ids.length) {
+      setUserMap({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const users = await batchUsers({ user_ids: ids }).unwrap();
+        if (cancelled) return;
+        const nextMap: Record<string, ApiUser> = {};
+        for (const u of users) {
+          if (u?.id) nextMap[u.id] = u;
+        }
+        setUserMap(nextMap);
+      } catch {
+        if (!cancelled) setUserMap({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [payments, batchUsers]);
 
   return (
     <RequireRole tab="payments">
@@ -111,50 +135,6 @@ export default function DashboardPaymentsPage() {
         {isError ? <p className="mt-2 text-sm text-red-600">Failed to load payments.</p> : null}
         {paymentError ? <p className="mt-2 text-sm text-red-600">{paymentError}</p> : null}
 
-        <div className="mt-4 grid gap-2 sm:grid-cols-5">
-          <input
-            placeholder="Booking ID"
-            value={newPayment.bookingId}
-            onChange={(e) => setNewPayment((p) => ({ ...p, bookingId: e.target.value }))}
-            className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          />
-          <input
-            type="number"
-            placeholder="Amount"
-            value={newPayment.amount}
-            onChange={(e) => setNewPayment((p) => ({ ...p, amount: Number(e.target.value) }))}
-            className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          />
-          <input
-            placeholder="Currency"
-            value={newPayment.currency}
-            onChange={(e) => setNewPayment((p) => ({ ...p, currency: e.target.value }))}
-            className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          />
-          <input
-            placeholder="Method"
-            value={newPayment.paymentMethod}
-            onChange={(e) => setNewPayment((p) => ({ ...p, paymentMethod: e.target.value }))}
-            className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          />
-          <button
-            type="button"
-            disabled={creatingPayment}
-            onClick={async () => {
-              try {
-                setPaymentError(null);
-                await createPayment(newPayment).unwrap();
-                setNewPayment((p) => ({ ...p, bookingId: "", amount: 0 }));
-              } catch (error) {
-                setPaymentError(parseError(error, "Failed to create payment."));
-              }
-            }}
-            className="h-10 rounded-md bg-zinc-900 px-3 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
-          >
-            {creatingPayment ? "Creating..." : "Create payment"}
-          </button>
-        </div>
-
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
@@ -176,15 +156,39 @@ export default function DashboardPaymentsPage() {
                     {payment.paymentId}
                   </td>
                   <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{payment.bookingId}</td>
-                  <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{payment.userId ?? "—"}</td>
+                  <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
+                    {payment.userId ? (
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-zinc-900 dark:text-zinc-100">
+                          {userMap[payment.userId]?.name || payment.userId}
+                        </p>
+                        <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+                          {payment.userId}
+                        </p>
+                      </div>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
                     {money(payment.amount, payment.currency)}
                   </td>
                   <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{payment.paymentMethod}</td>
                   <td className="px-2 py-3">
+                    {(() => {
+                      const allowedNext = PAYMENT_TRANSITIONS[payment.status] ?? [];
+                      const statusOptions: PaymentStatus[] = [payment.status, ...allowedNext];
+                      if (!isAdmin) {
+                        return (
+                          <span className="inline-flex rounded-md border border-zinc-300 bg-zinc-50 px-2 py-1 text-xs font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
+                            {payment.status}
+                          </span>
+                        );
+                      }
+                      return (
                     <select
                       value={payment.status}
-                      disabled={!isAdmin || updatingPaymentStatus}
+                      disabled={updatingPaymentStatus || allowedNext.length === 0}
                       onChange={async (e) => {
                         try {
                           setPaymentError(null);
@@ -198,43 +202,59 @@ export default function DashboardPaymentsPage() {
                       }}
                       className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs font-medium text-zinc-800 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                     >
-                      {PAYMENT_STATUS.map((status) => (
+                      {statusOptions.map((status) => (
                         <option key={status} value={status}>
                           {status}
                         </option>
                       ))}
                     </select>
+                      );
+                    })()}
                   </td>
                   <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
                     {payment.transactionReference ?? "N/A"}
                   </td>
                   <td className="px-2 py-3 text-right">
                     <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedPaymentId(payment.paymentId);
-                          setNewRefund((prev) => ({ ...prev, paymentId: payment.paymentId }));
-                        }}
-                        className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
-                      >
-                        Refunds
-                      </button>
-                      <button
-                        type="button"
-                        disabled={cancellingPayment}
-                        onClick={async () => {
-                          try {
-                            setPaymentError(null);
-                            await cancelPayment(payment.paymentId).unwrap();
-                          } catch (error) {
-                            setPaymentError(parseError(error, "Failed to cancel payment."));
-                          }
-                        }}
-                        className="rounded-md border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20"
-                      >
-                        Cancel
-                      </button>
+                      {isUser &&
+                      (payment.status === "SUCCESS" ||
+                        payment.status === "FAILED" ||
+                        payment.status === "CANCELLED") ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPaymentId(payment.paymentId);
+                            setRefundError(null);
+                            setRefundDraft({
+                              paymentId: payment.paymentId,
+                              refundAmount: payment.amount,
+                              refundReason: "",
+                            });
+                            setShowRefundModal(true);
+                          }}
+                          className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                        >
+                          Refund
+                        </button>
+                      ) : null}
+                      {isUser &&
+                      (payment.status === "PENDING" || payment.status === "PROCESSING") ? (
+                        <button
+                          type="button"
+                          disabled={cancellingPayment}
+                          onClick={async () => {
+                            try {
+                              setPaymentError(null);
+                              await cancelPayment(payment.paymentId).unwrap();
+                            } catch (error) {
+                              setPaymentError(parseError(error, "Failed to cancel payment."));
+                            }
+                          }}
+                          className="rounded-md border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20"
+                        >
+                          Cancel
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -253,46 +273,6 @@ export default function DashboardPaymentsPage() {
         </p>
         {refundError ? <p className="mt-2 text-sm text-red-600">{refundError}</p> : null}
 
-        <div className="mt-4 grid gap-2 sm:grid-cols-4">
-          <input
-            placeholder="Payment ID"
-            value={newRefund.paymentId}
-            onChange={(e) => setNewRefund((r) => ({ ...r, paymentId: e.target.value }))}
-            className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          />
-          <input
-            type="number"
-            placeholder="Refund amount"
-            value={newRefund.refundAmount}
-            onChange={(e) =>
-              setNewRefund((r) => ({ ...r, refundAmount: Number(e.target.value) }))
-            }
-            className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          />
-          <input
-            placeholder="Reason"
-            value={newRefund.refundReason}
-            onChange={(e) => setNewRefund((r) => ({ ...r, refundReason: e.target.value }))}
-            className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          />
-          <button
-            type="button"
-            disabled={creatingRefund}
-            onClick={async () => {
-              try {
-                setRefundError(null);
-                await createRefund(newRefund).unwrap();
-                setSelectedPaymentId(newRefund.paymentId);
-              } catch (error) {
-                setRefundError(parseError(error, "Failed to create refund."));
-              }
-            }}
-            className="h-10 rounded-md bg-zinc-900 px-3 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
-          >
-            {creatingRefund ? "Submitting..." : "Request refund"}
-          </button>
-        </div>
-
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
@@ -303,7 +283,7 @@ export default function DashboardPaymentsPage() {
                 <th className="px-2 py-2">Refund Amount</th>
                 <th className="px-2 py-2">Reason</th>
                 <th className="px-2 py-2">Status</th>
-                <th className="px-2 py-2 text-right">Actions</th>
+                <th className="px-2 py-2 text-right">Created</th>
               </tr>
             </thead>
             <tbody>
@@ -318,39 +298,111 @@ export default function DashboardPaymentsPage() {
                     {money(refund.refundAmount, "USD")}
                   </td>
                   <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{refund.refundReason}</td>
-                  <td className="px-2 py-3">
-                    <select
-                      value={refund.refundStatus}
-                      disabled={!isAdmin || updatingRefundStatus}
-                      onChange={async (e) => {
-                        try {
-                          setRefundError(null);
-                          await updateRefundStatus({
-                            refundId: refund.refundId,
-                            status: e.target.value,
-                          }).unwrap();
-                        } catch (error) {
-                          setRefundError(parseError(error, "Failed to update refund status."));
-                        }
-                      }}
-                      className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs font-medium text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-                    >
-                      {REFUND_STATUS.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
+                  <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
+                    {refund.refundStatus}
                   </td>
                   <td className="px-2 py-3 text-right text-xs text-zinc-500">
                     {refund.createdAt ? new Date(refund.createdAt).toLocaleString() : "—"}
                   </td>
                 </tr>
               ))}
+              {!refunds.length ? (
+                <tr>
+                  <td colSpan={7} className="px-2 py-4 text-sm text-zinc-500 dark:text-zinc-400">
+                    {selectedPaymentId
+                      ? "No refunds for the selected payment yet."
+                      : "Select a payment and click Refund to see refund history."}
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
       </section>
+
+      {showRefundModal ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Request refund"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !creatingRefund) {
+              setShowRefundModal(false);
+            }
+          }}
+        >
+          <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" />
+          <div className="relative w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+            <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+              Request refund
+            </h3>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              Submit a refund request for payment <span className="font-medium">{refundDraft.paymentId}</span>.
+            </p>
+
+            <div className="mt-4 space-y-3">
+              <label className="block text-sm">
+                <span className="text-zinc-700 dark:text-zinc-300">Payment ID</span>
+                <input
+                  value={refundDraft.paymentId}
+                  readOnly
+                  className="mt-1 h-10 w-full rounded-md border border-zinc-300 bg-zinc-50 px-3 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-zinc-700 dark:text-zinc-300">Refund amount</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={refundDraft.refundAmount}
+                  onChange={(e) =>
+                    setRefundDraft((r) => ({ ...r, refundAmount: Number(e.target.value) }))
+                  }
+                  className="mt-1 h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-zinc-700 dark:text-zinc-300">Reason</span>
+                <input
+                  value={refundDraft.refundReason}
+                  onChange={(e) => setRefundDraft((r) => ({ ...r, refundReason: e.target.value }))}
+                  placeholder="Customer requested cancellation"
+                  className="mt-1 h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                />
+              </label>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowRefundModal(false)}
+                disabled={creatingRefund}
+                className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={creatingRefund || !isUser || !refundDraft.paymentId || refundDraft.refundAmount <= 0}
+                onClick={async () => {
+                  try {
+                    setRefundError(null);
+                    await createRefund(refundDraft).unwrap();
+                    setSelectedPaymentId(refundDraft.paymentId);
+                    setShowRefundModal(false);
+                  } catch (error) {
+                    setRefundError(parseError(error, "Failed to create refund."));
+                  }
+                }}
+                className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+              >
+                {creatingRefund ? "Submitting..." : "Submit refund"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       </div>
     </RequireRole>
   );

@@ -7,7 +7,6 @@ import {
   useCancelBookingMutation,
   useCompletePaymentMutation,
   useListBookingsQuery,
-  useStartBookingPaymentMutation,
 } from "@/store/api";
 
 function bookingStatusStyles(status: string) {
@@ -39,7 +38,6 @@ function paymentStatusStyles(status: string) {
 export default function DashboardBookingsPage() {
   const { data: bookings = [], isLoading, isError } = useListBookingsQuery();
   const [cancelBooking, { isLoading: isCancelling }] = useCancelBookingMutation();
-  const [startBookingPayment, { isLoading: isStartingPayment }] = useStartBookingPaymentMutation();
   const [completePayment, { isLoading: isCompletingPayment }] = useCompletePaymentMutation();
   const [apiError, setApiError] = useState<string | null>(null);
 
@@ -188,7 +186,7 @@ export default function DashboardBookingsPage() {
               <div className="col-span-2 flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
-                  disabled={isCancelling || isStartingPayment || isCompletingPayment}
+                  disabled={isCancelling || isCompletingPayment}
                   onClick={async () => {
                     try {
                       setApiError(null);
@@ -203,24 +201,8 @@ export default function DashboardBookingsPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={isCancelling || isStartingPayment || isCompletingPayment}
-                  onClick={async () => {
-                    try {
-                      setApiError(null);
-                      await startBookingPayment(b.bookingId).unwrap();
-                    } catch (error) {
-                      setApiError(parseError(error, "Failed to start payment."));
-                    }
-                  }}
-                  className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
-                >
-                  Start pay
-                </button>
-                <button
-                  type="button"
                   disabled={
                     isCancelling ||
-                    isStartingPayment ||
                     isCompletingPayment ||
                     !b.paymentReferenceId ||
                     b.bookingStatus !== "AWAITING_PAYMENT"

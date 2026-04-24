@@ -14,7 +14,7 @@ export type DashboardTabKey =
 const ACCESS_BY_TAB: Record<DashboardTabKey, readonly DashboardRole[]> = {
   overview: ["USER", "ORGANIZER", "ADMIN"],
   events: ["ORGANIZER", "ADMIN"],
-  payments: ["ADMIN"],
+  payments: ["USER", "ADMIN"],
   bookings: ["USER", "ORGANIZER", "ADMIN"],
   inventory: ["ORGANIZER", "ADMIN"],
   users: ["ADMIN"],

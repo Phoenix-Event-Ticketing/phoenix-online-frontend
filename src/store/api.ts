@@ -192,6 +192,7 @@ export type UpdatePaymentStatusRequest = {
 export type CompletePaymentRequest = {
   id: string;
   status: "SUCCESS" | "FAILED";
+  paymentMethod?: "CARD" | "BANK_TRANSFER" | "WALLET";
 };
 export type CreateRefundRequest = {
   paymentId: string;
@@ -810,14 +811,18 @@ export const api = createApi({
         { type: "Booking", id: "LIST" },
       ],
     }),
-    startBookingPayment: builder.mutation<StartPaymentResponse, string>({
-      query: (bookingId) => ({
+    startBookingPayment: builder.mutation<
+      StartPaymentResponse,
+      { bookingId: string; paymentMethod?: "CARD" | "BANK_TRANSFER" | "WALLET" }
+    >({
+      query: ({ bookingId, paymentMethod }) => ({
         url: `/bookings/${encodeURIComponent(bookingId)}/start-payment`,
         method: "POST",
+        body: paymentMethod ? { paymentMethod } : undefined,
       }),
       transformResponse: (response: StartPaymentResponse) => response,
-      invalidatesTags: (_result, _err, bookingId) => [
-        { type: "Booking", id: bookingId },
+      invalidatesTags: (_result, _err, arg) => [
+        { type: "Booking", id: arg.bookingId },
         { type: "Booking", id: "LIST" },
       ],
     }),
