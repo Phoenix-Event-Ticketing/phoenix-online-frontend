@@ -79,7 +79,7 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
               Events
             </Link>{" "}
             <span className="px-1">›</span>
-            <Link href={`/events/${event.eventId}`} className="hover:text-white">
+            <Link href={`/event?eventId=${encodeURIComponent(event.eventId)}`} className="hover:text-white">
               {event.title}
             </Link>{" "}
             <span className="px-1">›</span>
@@ -300,7 +300,7 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
               </button>
 
               <Link
-                href={`/events/${event.eventId}`}
+                href={`/event?eventId=${encodeURIComponent(event.eventId)}`}
                 className="mt-3 block text-center text-sm font-medium text-zinc-700 hover:underline dark:text-zinc-300"
               >
                 Back to details

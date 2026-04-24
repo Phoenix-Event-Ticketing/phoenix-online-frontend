@@ -26,7 +26,7 @@ export default function EventsPage() {
           <EventCard
             key={event.eventId}
             event={event}
-            href={`/events/${event.eventId}`}
+            href={`/event?eventId=${encodeURIComponent(event.eventId)}`}
             variant="home"
             showStatus={false}
           />
