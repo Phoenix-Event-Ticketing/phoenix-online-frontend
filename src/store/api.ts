@@ -188,6 +188,7 @@ export type CreatePaymentRequest = {
 export type UpdatePaymentStatusRequest = {
   id: string;
   status: PaymentStatus;
+  paymentMethod?: "CARD" | "BANK_TRANSFER" | "WALLET";
 };
 export type CompletePaymentRequest = {
   id: string;
@@ -700,10 +701,10 @@ export const api = createApi({
       invalidatesTags: [{ type: "Payment", id: "LIST" }],
     }),
     updatePaymentStatus: builder.mutation<PaymentRecord, UpdatePaymentStatusRequest>({
-      query: ({ id, status }) => ({
+      query: ({ id, status, paymentMethod }) => ({
         url: `/payments/${encodeURIComponent(id)}/status`,
         method: "PATCH",
-        body: { status },
+        body: { status, paymentMethod },
       }),
       transformResponse: (response: ServiceEnvelope<PaymentRecord>) =>
         normalizePaymentRecord(
@@ -715,10 +716,10 @@ export const api = createApi({
       ],
     }),
     completePayment: builder.mutation<PaymentRecord, CompletePaymentRequest>({
-      query: ({ id, status }) => ({
+      query: ({ id, status, paymentMethod }) => ({
         url: `/payments/${encodeURIComponent(id)}/complete`,
         method: "POST",
-        body: { status },
+        body: { status, paymentMethod },
       }),
       transformResponse: (response: ServiceEnvelope<PaymentRecord>) =>
         normalizePaymentRecord(

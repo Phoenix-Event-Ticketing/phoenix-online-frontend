@@ -11,6 +11,7 @@ import {
   useGetEventInventoryAvailabilityQuery,
   useGetEventQuery,
   useStartBookingPaymentMutation,
+  useUpdatePaymentStatusMutation,
 } from "@/store/api";
 import { useAppSelector } from "@/store/hooks";
 
@@ -31,6 +32,7 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
   const [createBooking] = useCreateBookingMutation();
   const [startBookingPayment] = useStartBookingPaymentMutation();
   const [completePayment] = useCompletePaymentMutation();
+  const [updatePaymentStatus] = useUpdatePaymentStatusMutation();
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -405,12 +407,28 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                       bookingId: createdBooking.bookingId,
                       paymentMethod,
                     }).unwrap();
-                    await completePayment({
-                      id: paymentSession.paymentReferenceId,
-                      status: "SUCCESS",
-                      paymentMethod,
-                    }).unwrap();
-                    setBookingSuccess(`Payment approved via ${paymentMethod}. Redirecting...`);
+                    if (paymentMethod === "WALLET") {
+                      await completePayment({
+                        id: paymentSession.paymentReferenceId,
+                        status: "SUCCESS",
+                        paymentMethod,
+                      }).unwrap();
+                      setBookingSuccess("Wallet payment approved. Redirecting...");
+                    } else if (paymentMethod === "CARD") {
+                      await updatePaymentStatus({
+                        id: paymentSession.paymentReferenceId,
+                        status: "PROCESSING",
+                        paymentMethod,
+                      }).unwrap();
+                      setBookingSuccess("Card payment started and marked as processing. Redirecting...");
+                    } else {
+                      await updatePaymentStatus({
+                        id: paymentSession.paymentReferenceId,
+                        status: "PENDING",
+                        paymentMethod,
+                      }).unwrap();
+                      setBookingSuccess("Bank transfer created and left as pending. Redirecting...");
+                    }
                     setShowPaymentModal(false);
                     router.push("/dashboard/bookings");
                   } catch (error) {
