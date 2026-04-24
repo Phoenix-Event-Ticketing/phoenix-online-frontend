@@ -8,7 +8,7 @@ import {
   useBatchUsersMutation,
   useCancelPaymentMutation,
   useCreateRefundMutation,
-  useListRefundsQuery,
+  useGetRefundsByPaymentIdQuery,
   useListPaymentsQuery,
   useUpdatePaymentStatusMutation,
 } from "@/store/api";
@@ -28,8 +28,17 @@ export default function DashboardPaymentsPage() {
   const isUser = !!user?.roles?.includes("USER");
   const { data: payments = [], isLoading, isError } = useListPaymentsQuery(
     isAdmin ? { all: true } : undefined,
+    {
+      refetchOnMountOrArgChange: true,
+      refetchOnFocus: true,
+      refetchOnReconnect: true,
+      pollingInterval: 5000,
+    },
   );
-  const { data: refunds = [] } = useListRefundsQuery(isAdmin ? { all: true } : undefined);
+  const [selectedPaymentId, setSelectedPaymentId] = useState<string>("");
+  const { data: refunds = [] } = useGetRefundsByPaymentIdQuery(selectedPaymentId, {
+    skip: !selectedPaymentId,
+  });
   const [updatePaymentStatus, { isLoading: updatingPaymentStatus }] =
     useUpdatePaymentStatusMutation();
   const [cancelPayment, { isLoading: cancellingPayment }] = useCancelPaymentMutation();
@@ -217,8 +226,26 @@ export default function DashboardPaymentsPage() {
                   </td>
                   <td className="px-2 py-3 text-right">
                     <div className="flex justify-end gap-2">
-                      {((payment.status === "PENDING" && (isAdmin || isUser)) ||
-                        (payment.status === "PROCESSING" && isAdmin)) ? (
+                      {isUser &&
+                      (payment.status === "FAILED" || payment.status === "CANCELLED") ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPaymentId(payment.paymentId);
+                            setRefundError(null);
+                            setRefundDraft({
+                              paymentId: payment.paymentId,
+                              refundAmount: payment.amount,
+                              refundReason: "",
+                            });
+                            setShowRefundModal(true);
+                          }}
+                          className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                        >
+                          Refund
+                        </button>
+                      ) : null}
+                      {payment.status === "PENDING" && (isAdmin || isUser) ? (
                         <button
                           type="button"
                           disabled={cancellingPayment}
@@ -249,7 +276,7 @@ export default function DashboardPaymentsPage() {
           Refunds
         </h2>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          {isAdmin ? "All refunds in the system." : "Your refunds."}
+          Refund history for selected payment.
         </p>
         {refundError ? <p className="mt-2 text-sm text-red-600">{refundError}</p> : null}
 
@@ -289,7 +316,9 @@ export default function DashboardPaymentsPage() {
               {!refunds.length ? (
                 <tr>
                   <td colSpan={7} className="px-2 py-4 text-sm text-zinc-500 dark:text-zinc-400">
-                    No refunds found.
+                    {selectedPaymentId
+                      ? "No refunds for the selected payment yet."
+                      : "Select a payment and click Refund to see refund history."}
                   </td>
                 </tr>
               ) : null}
@@ -367,6 +396,7 @@ export default function DashboardPaymentsPage() {
                   try {
                     setRefundError(null);
                     await createRefund(refundDraft).unwrap();
+                    setSelectedPaymentId(refundDraft.paymentId);
                     setShowRefundModal(false);
                   } catch (error) {
                     setRefundError(parseError(error, "Failed to create refund."));

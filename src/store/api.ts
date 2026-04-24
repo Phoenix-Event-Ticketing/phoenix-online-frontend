@@ -749,6 +749,8 @@ export const api = createApi({
         ),
       invalidatesTags: (_result, _err, arg) => [
         { type: "Payment", id: arg.paymentId },
+        { type: "Payment", id: "LIST" },
+        { type: "Refund", id: `PAYMENT:${arg.paymentId}` },
         { type: "Refund", id: "LIST" },
       ],
     }),
