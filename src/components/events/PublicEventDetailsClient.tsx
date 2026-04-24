@@ -7,9 +7,17 @@ import { useGetEventQuery, useGetEventInventoryAvailabilityQuery } from "@/store
 export function PublicEventDetailsClient({ eventId }: { eventId: string }) {
   const { data: event, isLoading, isError } = useGetEventQuery(eventId, {
     skip: !eventId,
+    refetchOnMountOrArgChange: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+    pollingInterval: 30000,
   });
   const { data: inventory } = useGetEventInventoryAvailabilityQuery(eventId, {
     skip: !eventId,
+    refetchOnMountOrArgChange: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+    pollingInterval: 5000,
   });
   if (isLoading) {
     return (

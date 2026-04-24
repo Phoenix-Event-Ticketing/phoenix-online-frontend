@@ -33,6 +33,10 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
   const [completePayment] = useCompletePaymentMutation();
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"CARD" | "BANK_TRANSFER" | "WALLET">(
+    "CARD",
+  );
 
   const firstAvailable = useMemo(() => {
     return rates.find((r) => r.availableQuantity > 0)?.ticketType ?? rates[0]?.ticketType ?? "";
@@ -287,6 +291,105 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                   if (!selected) return;
                   setBookingError(null);
                   setBookingSuccess(null);
+                  setShowPaymentModal(true);
+                }}
+              >
+                {isProcessing ? "Processing..." : "Continue"}
+              </button>
+
+              <Link
+                href={`/events/${event.eventId}`}
+                className="mt-3 block text-center text-sm font-medium text-zinc-700 hover:underline dark:text-zinc-300"
+              >
+                Back to details
+              </Link>
+            </div>
+          </aside>
+        </div>
+      </main>
+
+      {showPaymentModal ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Payment method"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !isProcessing) {
+              setShowPaymentModal(false);
+            }
+          }}
+        >
+          <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" />
+          <div className="relative w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+                  Choose payment method
+                </h3>
+                <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                  Demo payment screen before checkout confirmation.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                disabled={isProcessing}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-50 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
+                aria-label="Close payment modal"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {[
+                { value: "CARD", label: "Card (Visa / MasterCard)" },
+                { value: "BANK_TRANSFER", label: "Bank transfer" },
+                { value: "WALLET", label: "Digital wallet" },
+              ].map((option) => (
+                <label
+                  key={option.value}
+                  className="flex cursor-pointer items-center justify-between rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-800"
+                >
+                  <span className="text-zinc-800 dark:text-zinc-200">{option.label}</span>
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value={option.value}
+                    checked={paymentMethod === option.value}
+                    onChange={() =>
+                      setPaymentMethod(option.value as "CARD" | "BANK_TRANSFER" | "WALLET")
+                    }
+                    disabled={isProcessing}
+                  />
+                </label>
+              ))}
+            </div>
+
+            <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+              <p className="text-xs text-zinc-600 dark:text-zinc-400">Booking total</p>
+              <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                {typeof total === "number" ? formatLkr(total) : "—"}
+              </p>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                disabled={isProcessing}
+                className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isProcessing || !selected || !user || !hasToken}
+                onClick={async () => {
+                  if (!user || !hasToken || !selected) return;
+                  setBookingError(null);
+                  setBookingSuccess(null);
                   setIsProcessing(true);
                   try {
                     const createdBooking = await createBooking({
@@ -303,7 +406,8 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                       id: paymentSession.paymentReferenceId,
                       status: "SUCCESS",
                     }).unwrap();
-                    setBookingSuccess("Booking confirmed and tickets marked as sold.");
+                    setBookingSuccess(`Payment approved via ${paymentMethod}. Redirecting...`);
+                    setShowPaymentModal(false);
                     router.push("/dashboard/bookings");
                   } catch (error) {
                     const maybeMessage =
@@ -320,20 +424,14 @@ export function PublicBookingClient({ eventId }: { eventId: string }) {
                     setIsProcessing(false);
                   }
                 }}
+                className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
               >
-                {isProcessing ? "Processing..." : "Continue"}
+                {isProcessing ? "Paying..." : "Pay now"}
               </button>
-
-              <Link
-                href={`/events/${event.eventId}`}
-                className="mt-3 block text-center text-sm font-medium text-zinc-700 hover:underline dark:text-zinc-300"
-              >
-                Back to details
-              </Link>
             </div>
-          </aside>
+          </div>
         </div>
-      </main>
+      ) : null}
     </div>
   );
 }
