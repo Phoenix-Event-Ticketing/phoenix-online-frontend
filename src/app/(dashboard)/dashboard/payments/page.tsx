@@ -320,9 +320,7 @@ export default function DashboardPaymentsPage() {
                   <td className="px-2 py-3 text-right">
                     <div className="flex justify-end gap-2">
                       {isUser &&
-                      (payment.status === "SUCCESS" ||
-                        payment.status === "FAILED" ||
-                        payment.status === "CANCELLED") ? (
+                      (payment.status === "FAILED" || payment.status === "CANCELLED") ? (
                         <button
                           type="button"
                           onClick={() => {

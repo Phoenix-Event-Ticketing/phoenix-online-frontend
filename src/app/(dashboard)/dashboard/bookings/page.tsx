@@ -76,24 +76,12 @@ export default function DashboardBookingsPage() {
     () => bookings.filter((b) => b.bookingStatus === "CONFIRMED").length,
     [bookings],
   );
-  const awaiting = useMemo(
-    () => bookings.filter((b) => b.bookingStatus === "AWAITING_PAYMENT").length,
-    [bookings],
-  );
-
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
-              Booking dashboard
-            </h2>
-          </div>
-          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Awaiting payment: {awaiting}
-          </p>
-        </div>
+        <h2 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+          Booking dashboard
+        </h2>
         {isLoading ? (
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">Loading bookings...</p>
         ) : null}
