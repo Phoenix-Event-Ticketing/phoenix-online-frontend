@@ -4,12 +4,17 @@ import { useEffect, useMemo, useState } from "react";
 import {
   type ApiUser,
   type ApiEnvelopeError,
+  type BookingRecord,
   type PaymentStatus,
   useBatchUsersMutation,
   useCancelPaymentMutation,
+  useCompletePaymentMutation,
   useCreateRefundMutation,
+  useGetBookingsByCustomerEmailQuery,
   useGetRefundsByPaymentIdQuery,
+  useListBookingsQuery,
   useListPaymentsQuery,
+  useStartBookingPaymentMutation,
   useUpdatePaymentStatusMutation,
 } from "@/store/api";
 import { RequireRole } from "@/components/dashboard/RequireRole";
@@ -35,6 +40,25 @@ export default function DashboardPaymentsPage() {
       pollingInterval: 5000,
     },
   );
+  const {
+    data: allBookings = [],
+    isLoading: isLoadingBookingsAll,
+    isError: isErrorBookingsAll,
+  } = useListBookingsQuery(undefined, { skip: !isAdmin });
+  const {
+    data: ownBookings = [],
+    isLoading: isLoadingBookingsOwn,
+    isError: isErrorBookingsOwn,
+  } = useGetBookingsByCustomerEmailQuery(user?.email ?? "", {
+    skip: isAdmin || !user?.email,
+  });
+  const bookings = isAdmin ? allBookings : ownBookings;
+  const pendingBookings = useMemo(
+    () => bookings.filter((booking) => booking.bookingStatus === "AWAITING_PAYMENT"),
+    [bookings],
+  );
+  const isLoadingBookings = isAdmin ? isLoadingBookingsAll : isLoadingBookingsOwn;
+  const isErrorBookings = isAdmin ? isErrorBookingsAll : isErrorBookingsOwn;
   const [selectedPaymentId, setSelectedPaymentId] = useState<string>("");
   const { data: refunds = [] } = useGetRefundsByPaymentIdQuery(selectedPaymentId, {
     skip: !selectedPaymentId,
@@ -42,12 +66,19 @@ export default function DashboardPaymentsPage() {
   const [updatePaymentStatus, { isLoading: updatingPaymentStatus }] =
     useUpdatePaymentStatusMutation();
   const [cancelPayment, { isLoading: cancellingPayment }] = useCancelPaymentMutation();
+  const [startBookingPayment, { isLoading: startingBookingPayment }] = useStartBookingPaymentMutation();
+  const [completePayment, { isLoading: completingPayment }] = useCompletePaymentMutation();
   const [createRefund, { isLoading: creatingRefund }] = useCreateRefundMutation();
   const [batchUsers] = useBatchUsersMutation();
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [refundError, setRefundError] = useState<string | null>(null);
   const [userMap, setUserMap] = useState<Record<string, ApiUser>>({});
   const [showRefundModal, setShowRefundModal] = useState(false);
+  const [showPayBookingModal, setShowPayBookingModal] = useState(false);
+  const [bookingToPay, setBookingToPay] = useState<BookingRecord | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<
+    "CARD" | "BANK_TRANSFER" | "WALLET"
+  >("CARD");
   const [refundDraft, setRefundDraft] = useState({
     paymentId: "",
     refundAmount: 0,
@@ -134,6 +165,70 @@ export default function DashboardPaymentsPage() {
           </p>
         </div>
       </div>
+
+      <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+        <h2 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+          Awaiting-payment bookings
+        </h2>
+        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+          Start payment from here. Card and wallet are completed immediately, bank transfers stay
+          pending for approval.
+        </p>
+        {isLoadingBookings ? (
+          <p className="mt-2 text-sm text-zinc-600">Loading bookings...</p>
+        ) : null}
+        {isErrorBookings ? (
+          <p className="mt-2 text-sm text-red-600">Failed to load bookings.</p>
+        ) : null}
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                <th className="px-2 py-2">Booking ID</th>
+                <th className="px-2 py-2">Event ID</th>
+                <th className="px-2 py-2">Amount</th>
+                <th className="px-2 py-2">Status</th>
+                <th className="px-2 py-2 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingBookings.map((booking) => (
+                <tr key={booking.bookingId} className="border-b border-zinc-100 dark:border-zinc-900">
+                  <td className="px-2 py-3 font-medium text-zinc-900 dark:text-zinc-100">
+                    {booking.bookingId}
+                  </td>
+                  <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{booking.eventId}</td>
+                  <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">
+                    {money(booking.totalAmount, "LKR")}
+                  </td>
+                  <td className="px-2 py-3 text-zinc-700 dark:text-zinc-300">{booking.bookingStatus}</td>
+                  <td className="px-2 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPaymentMethod("CARD");
+                        setBookingToPay(booking);
+                        setPaymentError(null);
+                        setShowPayBookingModal(true);
+                      }}
+                      className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                    >
+                      Pay
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {!pendingBookings.length ? (
+                <tr>
+                  <td colSpan={5} className="px-2 py-4 text-sm text-zinc-500 dark:text-zinc-400">
+                    No bookings awaiting payment.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
         <h2 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
@@ -405,6 +500,95 @@ export default function DashboardPaymentsPage() {
                 className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
               >
                 {creatingRefund ? "Submitting..." : "Submit refund"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {showPayBookingModal && bookingToPay ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Pay booking"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !startingBookingPayment && !completingPayment) {
+              setShowPayBookingModal(false);
+            }
+          }}
+        >
+          <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" />
+          <div className="relative w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+            <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Complete payment</h3>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              Booking <span className="font-medium">{bookingToPay.bookingId}</span>
+            </p>
+            <div className="mt-4 space-y-2">
+              {[
+                { value: "CARD", label: "Card (instant confirm)" },
+                { value: "WALLET", label: "Digital wallet (instant confirm)" },
+                { value: "BANK_TRANSFER", label: "Bank transfer (awaiting approval)" },
+              ].map((option) => (
+                <label
+                  key={option.value}
+                  className="flex cursor-pointer items-center justify-between rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-800"
+                >
+                  <span className="text-zinc-800 dark:text-zinc-200">{option.label}</span>
+                  <input
+                    type="radio"
+                    name="dashboardPaymentMethod"
+                    value={option.value}
+                    checked={selectedPaymentMethod === option.value}
+                    onChange={() =>
+                      setSelectedPaymentMethod(option.value as "CARD" | "BANK_TRANSFER" | "WALLET")
+                    }
+                    disabled={startingBookingPayment || completingPayment}
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+              <p className="text-xs text-zinc-600 dark:text-zinc-400">Total</p>
+              <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                {money(bookingToPay.totalAmount, "LKR")}
+              </p>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPayBookingModal(false)}
+                disabled={startingBookingPayment || completingPayment}
+                className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={startingBookingPayment || completingPayment}
+                onClick={async () => {
+                  try {
+                    setPaymentError(null);
+                    const paymentSession = await startBookingPayment({
+                      bookingId: bookingToPay.bookingId,
+                      paymentMethod: selectedPaymentMethod,
+                    }).unwrap();
+                    if (selectedPaymentMethod === "BANK_TRANSFER") {
+                      setShowPayBookingModal(false);
+                      return;
+                    }
+                    await completePayment({
+                      id: paymentSession.paymentReferenceId,
+                      status: "SUCCESS",
+                      paymentMethod: selectedPaymentMethod,
+                    }).unwrap();
+                    setShowPayBookingModal(false);
+                  } catch (error) {
+                    setPaymentError(parseError(error, "Failed to process booking payment."));
+                  }
+                }}
+                className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+              >
+                {startingBookingPayment || completingPayment ? "Processing..." : "Continue"}
               </button>
             </div>
           </div>

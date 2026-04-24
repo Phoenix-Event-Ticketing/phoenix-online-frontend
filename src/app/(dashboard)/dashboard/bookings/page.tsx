@@ -5,7 +5,6 @@ import { formatEventDateTime, formatLkr } from "@/lib/events";
 import {
   type ApiEnvelopeError,
   useCancelBookingMutation,
-  useCompletePaymentMutation,
   useGetBookingsByCustomerEmailQuery,
   useListBookingsQuery,
 } from "@/store/api";
@@ -56,7 +55,6 @@ export default function DashboardBookingsPage() {
   const isLoading = isPrivilegedViewer ? isLoadingAll : isLoadingOwn;
   const isError = isPrivilegedViewer ? isErrorAll : isErrorOwn;
   const [cancelBooking, { isLoading: isCancelling }] = useCancelBookingMutation();
-  const [completePayment, { isLoading: isCompletingPayment }] = useCompletePaymentMutation();
   const [apiError, setApiError] = useState<string | null>(null);
 
   function parseError(error: unknown, fallback: string) {
@@ -204,7 +202,7 @@ export default function DashboardBookingsPage() {
               <div className="col-span-2 flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
-                  disabled={isCancelling || isCompletingPayment}
+                  disabled={isCancelling}
                   onClick={async () => {
                     try {
                       setApiError(null);
@@ -217,30 +215,17 @@ export default function DashboardBookingsPage() {
                 >
                   Cancel
                 </button>
-                <button
-                  type="button"
-                  disabled={
-                    isCancelling ||
-                    isCompletingPayment ||
-                    !b.paymentReferenceId ||
-                    b.bookingStatus !== "AWAITING_PAYMENT"
-                  }
-                  onClick={async () => {
-                    if (!b.paymentReferenceId) return;
-                    try {
-                      setApiError(null);
-                      await completePayment({
-                        id: b.paymentReferenceId,
-                        status: "SUCCESS",
-                      }).unwrap();
-                    } catch (error) {
-                      setApiError(parseError(error, "Failed to complete payment."));
-                    }
-                  }}
-                  className="rounded-md border border-emerald-300 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900/60 dark:text-emerald-200 dark:hover:bg-emerald-950/30"
+                <a
+                  href="/dashboard/payments"
+                  className={[
+                    "rounded-md border border-emerald-300 px-2 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-900/60 dark:text-emerald-200",
+                    b.bookingStatus === "AWAITING_PAYMENT"
+                      ? "hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                      : "pointer-events-none opacity-50",
+                  ].join(" ")}
                 >
-                  Complete
-                </button>
+                  Go to Payments
+                </a>
               </div>
             </div>
           ))}

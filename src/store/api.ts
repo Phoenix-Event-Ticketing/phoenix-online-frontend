@@ -713,13 +713,14 @@ export const api = createApi({
       invalidatesTags: (_result, _err, arg) => [
         { type: "Payment", id: arg.id },
         { type: "Payment", id: "LIST" },
+        { type: "Booking", id: "LIST" },
       ],
     }),
     completePayment: builder.mutation<PaymentRecord, CompletePaymentRequest>({
       query: ({ id, status, paymentMethod }) => ({
         url: `/payments/${encodeURIComponent(id)}/complete`,
         method: "POST",
-        body: { status, paymentMethod },
+        body: paymentMethod ? { status, paymentMethod } : { status },
       }),
       transformResponse: (response: ServiceEnvelope<PaymentRecord>) =>
         normalizePaymentRecord(
@@ -728,6 +729,7 @@ export const api = createApi({
       invalidatesTags: (_result, _err, arg) => [
         { type: "Payment", id: arg.id },
         { type: "Payment", id: "LIST" },
+        { type: "Booking", id: "LIST" },
       ],
     }),
     cancelPayment: builder.mutation<PaymentRecord, string>({
@@ -867,6 +869,7 @@ export const api = createApi({
       invalidatesTags: (_result, _err, arg) => [
         { type: "Booking", id: arg.bookingId },
         { type: "Booking", id: "LIST" },
+        { type: "Payment", id: "LIST" },
       ],
     }),
     getBookingsByCustomerEmail: builder.query<BookingRecord[], string>({
