@@ -7,7 +7,7 @@ import {
   type FetchBaseQueryMeta,
 } from "@reduxjs/toolkit/query/react";
 import { getPersistedAccessToken } from "@/lib/auth-ui";
-import type { EventSummary } from "@/lib/events";
+import type { EventStatus, EventSummary } from "@/lib/events";
 
 export type UserRole = "USER" | "ORGANIZER" | "ADMIN";
 
@@ -390,8 +390,10 @@ const protectedRouteRules: ProtectedRouteRule[] = [
   // Event write endpoints are protected.
   { method: "POST", testPath: (path) => path === "/events" },
   { method: "PUT", testPath: (path) => /^\/events\/[^/]+$/.test(path) },
+  { method: "GET", testPath: (path) => path === "/events/internal/events" },
   { method: "PATCH", testPath: (path) => /^\/events\/[^/]+\/publish$/.test(path) },
   { method: "PATCH", testPath: (path) => /^\/events\/[^/]+\/cancel$/.test(path) },
+  { method: "PATCH", testPath: (path) => /^\/events\/[^/]+\/status$/.test(path) },
   // Inventory mutation/admin APIs are protected.
   { method: "GET", testPath: (path) => /^\/inventory\/[^/]+$/.test(path) },
   { method: "POST", testPath: (path) => path === "/inventory" || path === "/inventory/bulk" },
@@ -549,6 +551,16 @@ export const api = createApi({
             ]
           : [{ type: "Event", id: "LIST" }],
     }),
+    listAllEvents: builder.query<EventRecord[], void>({
+      query: () => ({ url: "/events/internal/events" }),
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((event) => ({ type: "Event" as const, id: event.eventId })),
+              { type: "Event" as const, id: "LIST" },
+            ]
+          : [{ type: "Event", id: "LIST" }],
+    }),
     getEvent: builder.query<EventRecord, string>({
       query: (eventId) => ({ url: `/events/${encodeURIComponent(eventId)}` }),
       providesTags: (_result, _err, eventId) => [{ type: "Event", id: eventId }],
@@ -591,6 +603,17 @@ export const api = createApi({
       }),
       invalidatesTags: (_result, _err, eventId) => [
         { type: "Event", id: eventId },
+        { type: "Event", id: "LIST" },
+      ],
+    }),
+    updateEventStatus: builder.mutation<EventRecord, { eventId: string; status: EventStatus }>({
+      query: ({ eventId, status }) => ({
+        url: `/events/${encodeURIComponent(eventId)}/status`,
+        method: "PATCH",
+        body: { status },
+      }),
+      invalidatesTags: (_result, _err, arg) => [
+        { type: "Event", id: arg.eventId },
         { type: "Event", id: "LIST" },
       ],
     }),
@@ -866,11 +889,13 @@ export const {
   useUpdateUserMutation,
   useUpdateUserRoleMutation,
   useListEventsQuery,
+  useListAllEventsQuery,
   useGetEventQuery,
   useCreateEventMutation,
   useUpdateEventMutation,
   usePublishEventMutation,
   useCancelEventMutation,
+  useUpdateEventStatusMutation,
   useGetEventInventoryQuery,
   useGetEventInventoryAvailabilityQuery,
   useGetInventoryByIdQuery,

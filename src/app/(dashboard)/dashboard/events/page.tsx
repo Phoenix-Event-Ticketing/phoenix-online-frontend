@@ -7,14 +7,14 @@ import { type EventStatus, type EventSummary } from "@/lib/events";
 import {
   useCancelEventMutation,
   useCreateEventMutation,
-  useListEventsQuery,
+  useListAllEventsQuery,
   usePublishEventMutation,
   useUpdateEventMutation,
   type EventApiError,
 } from "@/store/api";
 
 export default function DashboardEventsPage() {
-  const { data: events = [], isLoading, isError } = useListEventsQuery();
+  const { data: events = [], isLoading, isError } = useListAllEventsQuery();
   const [createEvent, { isLoading: creating }] = useCreateEventMutation();
   const [updateEvent, { isLoading: updating }] = useUpdateEventMutation();
   const [publishEvent, { isLoading: publishing }] = usePublishEventMutation();
