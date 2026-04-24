@@ -6,9 +6,11 @@ import {
   type ApiEnvelopeError,
   useCancelBookingMutation,
   useCompletePaymentMutation,
+  useGetBookingsByCustomerEmailQuery,
   useListBookingsQuery,
   useStartBookingPaymentMutation,
 } from "@/store/api";
+import { useAppSelector } from "@/store/hooks";
 
 function bookingStatusStyles(status: string) {
   switch (status) {
@@ -37,7 +39,23 @@ function paymentStatusStyles(status: string) {
 }
 
 export default function DashboardBookingsPage() {
-  const { data: bookings = [], isLoading, isError } = useListBookingsQuery();
+  const user = useAppSelector((s) => s.session.user);
+  const isPrivilegedViewer = !!user?.roles?.some((role) => role === "ADMIN" || role === "ORGANIZER");
+  const {
+    data: allBookings = [],
+    isLoading: isLoadingAll,
+    isError: isErrorAll,
+  } = useListBookingsQuery(undefined, { skip: !isPrivilegedViewer });
+  const {
+    data: ownBookings = [],
+    isLoading: isLoadingOwn,
+    isError: isErrorOwn,
+  } = useGetBookingsByCustomerEmailQuery(user?.email ?? "", {
+    skip: isPrivilegedViewer || !user?.email,
+  });
+  const bookings = isPrivilegedViewer ? allBookings : ownBookings;
+  const isLoading = isPrivilegedViewer ? isLoadingAll : isLoadingOwn;
+  const isError = isPrivilegedViewer ? isErrorAll : isErrorOwn;
   const [cancelBooking, { isLoading: isCancelling }] = useCancelBookingMutation();
   const [startBookingPayment, { isLoading: isStartingPayment }] = useStartBookingPaymentMutation();
   const [completePayment, { isLoading: isCompletingPayment }] = useCompletePaymentMutation();
